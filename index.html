@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StockSim — Learn to Trade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<!-- ── SPLASH ─────────────────────────────────────────────────────── -->
+<div id="splash" class="screen active">
+  <div class="splash-bg"><div class="grid-lines"></div></div>
+  <div class="ticker-tape" id="tickerTape"></div>
+  <div class="splash-content">
+    <div class="logo-block">
+      <div class="logo-symbol">◈</div>
+      <h1 class="logo-text">StockSim</h1>
+      <p class="logo-sub">LEARN TO TRADE. RISK NOTHING REAL.</p>
+    </div>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchTab('login')">LOGIN</button>
+        <button class="auth-tab" onclick="switchTab('register')">REGISTER</button>
+      </div>
+      <div id="loginForm" class="auth-form active">
+        <div class="field-group"><label>USERNAME</label><input type="text" id="loginUsername" placeholder="your_username"/></div>
+        <div class="field-group"><label>PASSWORD</label><input type="password" id="loginPassword" placeholder="••••••••"/></div>
+        <button class="btn-primary" onclick="login()"><span>ENTER MARKET</span><span>→</span></button>
+        <p class="demo-hint">Demo: <code>demo_alice</code> / <code>demo1234</code></p>
+      </div>
+      <div id="registerForm" class="auth-form">
+        <div class="field-group"><label>USERNAME</label><input type="text" id="regUsername" placeholder="choose_username"/></div>
+        <div class="field-group"><label>EMAIL</label><input type="email" id="regEmail" placeholder="you@email.com"/></div>
+        <div class="field-group"><label>PASSWORD</label><input type="password" id="regPassword" placeholder="min 6 characters"/></div>
+        <button class="btn-primary" onclick="register()"><span>START WITH S$100,000</span><span>→</span></button>
+      </div>
+      <div id="authError" class="auth-error hidden"></div>
+    </div>
+    <div class="splash-footer">
+      <span>NO REAL MONEY</span><span class="dot">·</span>
+      <span>NO ADS</span><span class="dot">·</span>
+      <span>NO PRO PLAN</span><span class="dot">·</span>
+      <span>FREE FOREVER</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── APP ───────────────────────────────────────────────────────── -->
+<div id="app" class="screen">
+  <nav class="sidebar">
+    <div class="sidebar-logo"><span class="logo-symbol-sm">◈</span><span>StockSim</span></div>
+    <div class="nav-section">
+      <span class="nav-label">TRADING</span>
+      <button class="nav-btn active" onclick="showPanel('dashboard')" data-panel="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
+      <button class="nav-btn" onclick="showPanel('trade')" data-panel="trade"><span class="nav-icon">⇄</span>Trade</button>
+      <button class="nav-btn" onclick="showPanel('charts')" data-panel="charts"><span class="nav-icon">📈</span>Charts</button>
+      <button class="nav-btn" onclick="showPanel('portfolio')" data-panel="portfolio"><span class="nav-icon">◉</span>Portfolio</button>
+      <button class="nav-btn" onclick="showPanel('watchlist')" data-panel="watchlist"><span class="nav-icon">◎</span>Watchlist</button>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">LEARN</span>
+      <button class="nav-btn" onclick="showPanel('education')" data-panel="education"><span class="nav-icon">◧</span>Lessons</button>
+      <button class="nav-btn" onclick="showPanel('glossary')" data-panel="glossary"><span class="nav-icon">≡</span>Glossary</button>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">COMMUNITY</span>
+      <button class="nav-btn" onclick="showPanel('leaderboard')" data-panel="leaderboard"><span class="nav-icon">▲</span>Leaderboard</button>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-chip" onclick="showPanel('profile')" style="cursor:pointer">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-info">
+          <span id="sidebarUsername">—</span>
+          <span id="sidebarBalance" class="user-balance">S$0</span>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="logout()" title="Logout">⏻</button>
+    </div>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- ── DASHBOARD ── -->
+    <div id="panel-dashboard" class="panel active">
+      <div class="panel-header">
+        <div><h2>Dashboard</h2><p class="panel-sub" id="dashGreeting">Welcome back.</p></div>
+        <div class="header-stats">
+          <div class="stat-chip"><span class="stat-label">TOTAL VALUE</span><span class="stat-val" id="headerTotalValue">—</span></div>
+          <div class="stat-chip"><span class="stat-label">P&L</span><span class="stat-val" id="headerPnl">—</span></div>
+        </div>
+      </div>
+      <div class="sentiment-bar">
+        <span class="sentiment-label">MARKET SENTIMENT</span>
+        <div class="sentiment-meter"><div class="sentiment-fill" id="sentimentFill"></div></div>
+        <span class="sentiment-value" id="sentimentValue">Loading...</span>
+      </div>
+      <section class="section">
+        <div class="section-header"><h3>MARKET PULSE</h3><button class="btn-sm" onclick="loadFeatured()">↻ REFRESH</button></div>
+        <div class="ticker-grid" id="featuredGrid"><div class="loading-row">Fetching live prices...</div></div>
+      </section>
+      <section class="section">
+        <div class="section-header"><h3>YOUR POSITIONS</h3><button class="btn-sm" onclick="showPanel('portfolio')">VIEW ALL →</button></div>
+        <div id="dashHoldings"><div class="loading-row">Loading portfolio...</div></div>
+      </section>
+      <div class="tip-section hidden" id="tipSection">
+        <span>💡</span><p id="tipText"></p>
+      </div>
+    </div>
+
+    <!-- ── TRADE ── -->
+    <div id="panel-trade" class="panel">
+      <div class="panel-header">
+        <div><h2>Trade</h2><p class="panel-sub">Select a stock, then choose your action</p></div>
+        <div class="stat-chip"><span class="stat-label">AVAILABLE</span><span class="stat-val" id="tradeBalance">S$0</span></div>
+      </div>
+
+      <div class="trader-box">
+        <!-- Step 1 -->
+        <div class="step-label"><span class="step-num">1</span> FIND A STOCK</div>
+        <div class="trader-search-wrap">
+          <select id="tickerDropdown" class="ticker-select" onchange="onDropdownSelect(this.value)">
+            <option value="">⬇ Pick from popular stocks...</option>
+            <optgroup label="🖥 Technology">
+              <option value="AAPL">AAPL — Apple</option>
+              <option value="MSFT">MSFT — Microsoft</option>
+              <option value="GOOGL">GOOGL — Alphabet</option>
+              <option value="AMZN">AMZN — Amazon</option>
+              <option value="META">META — Meta</option>
+              <option value="NVDA">NVDA — NVIDIA</option>
+              <option value="TSLA">TSLA — Tesla</option>
+              <option value="NFLX">NFLX — Netflix</option>
+              <option value="AMD">AMD — AMD</option>
+              <option value="ORCL">ORCL — Oracle</option>
+              <option value="INTC">INTC — Intel</option>
+              <option value="ADBE">ADBE — Adobe</option>
+            </optgroup>
+            <optgroup label="🏦 Finance">
+              <option value="JPM">JPM — JPMorgan</option>
+              <option value="BAC">BAC — Bank of America</option>
+              <option value="GS">GS — Goldman Sachs</option>
+              <option value="V">V — Visa</option>
+              <option value="MA">MA — Mastercard</option>
+              <option value="BRK-B">BRK-B — Berkshire Hathaway</option>
+            </optgroup>
+            <optgroup label="🏥 Healthcare">
+              <option value="JNJ">JNJ — Johnson &amp; Johnson</option>
+              <option value="PFE">PFE — Pfizer</option>
+              <option value="UNH">UNH — UnitedHealth</option>
+              <option value="ABBV">ABBV — AbbVie</option>
+            </optgroup>
+            <optgroup label="🛒 Consumer">
+              <option value="WMT">WMT — Walmart</option>
+              <option value="KO">KO — Coca-Cola</option>
+              <option value="MCD">MCD — McDonald's</option>
+              <option value="NKE">NKE — Nike</option>
+              <option value="PG">PG — Procter &amp; Gamble</option>
+              <option value="SBUX">SBUX — Starbucks</option>
+            </optgroup>
+            <optgroup label="⚡ Energy">
+              <option value="XOM">XOM — ExxonMobil</option>
+              <option value="CVX">CVX — Chevron</option>
+            </optgroup>
+            <optgroup label="📈 ETFs">
+              <option value="SPY">SPY — S&amp;P 500 ETF</option>
+              <option value="QQQ">QQQ — NASDAQ ETF</option>
+              <option value="DIA">DIA — Dow Jones ETF</option>
+              <option value="VTI">VTI — Total Market ETF</option>
+            </optgroup>
+          </select>
+          <div class="or-divider">OR</div>
+          <div class="manual-search-row">
+            <input type="text" id="tradeTickerInput" class="term-input" placeholder="Type any ticker (e.g. AAPL)" onkeyup="if(event.key==='Enter') lookupStock()"/>
+            <button class="btn-primary-sm" onclick="lookupStock()">GO</button>
+          </div>
+        </div>
+
+        <!-- Stock Card -->
+        <div id="stockCard" class="stock-result-card hidden">
+          <div class="src-header">
+            <div class="src-identity">
+              <div class="src-ticker" id="infoTicker">—</div>
+              <div class="src-name" id="infoName">—</div>
+              <div class="src-sector" id="infoSector">—</div>
+            </div>
+            <div class="src-price-block">
+              <div class="src-price" id="infoPrice">—</div>
+              <div class="src-price-sub">LIVE PRICE (USD)</div>
+            </div>
+          </div>
+          <div class="src-metrics">
+            <div class="src-metric"><span>P/E RATIO</span><strong id="infoPE">—</strong></div>
+            <div class="src-metric"><span>MKT CAP</span><strong id="infoMktCap">—</strong></div>
+            <div class="src-metric"><span>BETA</span><strong id="infoBeta">—</strong></div>
+            <div class="src-metric"><span>DIV YIELD</span><strong id="infoDivYield">—</strong></div>
+            <div class="src-metric"><span>52W HIGH</span><strong id="info52High">—</strong></div>
+            <div class="src-metric"><span>52W LOW</span><strong id="info52Low">—</strong></div>
+          </div>
+          <p class="src-desc" id="infoDesc"></p>
+        </div>
+
+        <!-- Step 2: Action Dropdown -->
+        <div id="actionRow" class="hidden" style="margin-top:20px">
+          <div class="step-label"><span class="step-num">2</span> WHAT DO YOU WANT TO DO?</div>
+          <select id="actionDropdown" class="action-select" onchange="onActionChange()">
+            <option value="">— Choose an action —</option>
+            <option value="buy">📈  BUY — Purchase shares at market price</option>
+            <option value="sell">📉  SELL — Sell shares you own</option>
+            <option value="limit_buy">⏳  LIMIT BUY — Auto-buy when price drops to target</option>
+            <option value="limit_sell">⏳  LIMIT SELL — Auto-sell when price rises to target</option>
+            <option value="watchlist">👁  WATCHLIST — Track this stock</option>
+          </select>
+        </div>
+
+        <!-- Step 3: Action Panels -->
+        <div id="actionPanel" class="action-panel hidden">
+
+          <!-- BUY -->
+          <div id="ap-buy" class="ap-block hidden">
+            <h4 class="ap-title">📈 BUY AT MARKET PRICE</h4>
+            <div class="ap-grid">
+              <div class="ap-left">
+                <label class="term-label">QUANTITY (SHARES)</label>
+                <div class="qty-row">
+                  <button class="qty-btn" onclick="adjustQty('execQty',-1)">−</button>
+                  <input type="number" id="execQty" value="1" min="1" oninput="calcCost()"/>
+                  <button class="qty-btn" onclick="adjustQty('execQty',1)">+</button>
+                </div>
+              </div>
+              <div class="cost-card">
+                <div class="cost-row"><span>PRICE / SHARE</span><strong id="previewPrice">—</strong></div>
+                <div class="cost-row"><span>QUANTITY</span><strong id="previewQty">1</strong></div>
+                <div class="cost-divider"></div>
+                <div class="cost-row big"><span>TOTAL COST</span><strong id="estCost" style="color:var(--green)">—</strong></div>
+                <div class="cost-row"><span>BALANCE AFTER</span><strong id="afterBalance">—</strong></div>
+              </div>
+            </div>
+            <button class="ap-execute-btn buy-execute" onclick="executeTrade('buy')">▲ BUY NOW</button>
+            <div id="tradeResult" class="trade-result hidden"></div>
+          </div>
+
+          <!-- SELL -->
+          <div id="ap-sell" class="ap-block hidden">
+            <h4 class="ap-title">📉 SELL AT MARKET PRICE</h4>
+            <div id="holdingBanner" class="holding-banner"></div>
+            <div class="ap-grid">
+              <div class="ap-left">
+                <label class="term-label">QUANTITY TO SELL</label>
+                <div class="qty-row">
+                  <button class="qty-btn" onclick="adjustQty('sellQty',-1)">−</button>
+                  <input type="number" id="sellQty" value="1" min="1" oninput="calcSellProceeds()"/>
+                  <button class="qty-btn" onclick="adjustQty('sellQty',1)">+</button>
+                </div>
+                <button class="text-link" onclick="sellAllShares()">SELL ALL →</button>
+              </div>
+              <div class="cost-card sell-card">
+                <div class="cost-row"><span>PRICE / SHARE</span><strong id="sellPreviewPrice">—</strong></div>
+                <div class="cost-row"><span>YOUR AVG COST</span><strong id="sellAvgCost">—</strong></div>
+                <div class="cost-divider"></div>
+                <div class="cost-row big"><span>PROCEEDS</span><strong id="sellProceeds" style="color:var(--accent)">—</strong></div>
+                <div class="cost-row"><span>GAIN / LOSS</span><strong id="sellPnl">—</strong></div>
+              </div>
+            </div>
+            <button class="ap-execute-btn sell-execute" onclick="executeTrade('sell')">▼ SELL NOW</button>
+            <div id="sellResult" class="trade-result hidden"></div>
+          </div>
+
+          <!-- LIMIT BUY -->
+          <div id="ap-limit_buy" class="ap-block hidden">
+            <h4 class="ap-title">⏳ LIMIT BUY ORDER</h4>
+            <p class="ap-desc">Order executes automatically when the price drops to your target.</p>
+            <div class="ap-grid">
+              <div class="ap-left">
+                <div class="field-group"><label>TARGET PRICE (S$)</label><input type="number" id="limitBuyPrice" placeholder="e.g. 175.00" step="0.01" oninput="calcLimitCost()"/></div>
+                <div class="field-group" style="margin-top:12px"><label>QUANTITY</label>
+                  <div class="qty-row">
+                    <button class="qty-btn" onclick="adjustQty('limitBuyQty',-1)">−</button>
+                    <input type="number" id="limitBuyQty" value="1" min="1" oninput="calcLimitCost()"/>
+                    <button class="qty-btn" onclick="adjustQty('limitBuyQty',1)">+</button>
+                  </div>
+                </div>
+              </div>
+              <div class="cost-card">
+                <div class="cost-row"><span>CURRENT PRICE</span><strong id="limitCurrent">—</strong></div>
+                <div class="cost-row"><span>YOUR TARGET</span><strong id="limitTarget">—</strong></div>
+                <div class="cost-divider"></div>
+                <div class="cost-row big"><span>FUNDS RESERVED</span><strong id="limitReserved">—</strong></div>
+              </div>
+            </div>
+            <button class="ap-execute-btn buy-execute" onclick="placeLimitOrder('buy')">PLACE LIMIT BUY</button>
+            <div id="limitBuyResult" class="trade-result hidden"></div>
+          </div>
+
+          <!-- LIMIT SELL -->
+          <div id="ap-limit_sell" class="ap-block hidden">
+            <h4 class="ap-title">⏳ LIMIT SELL ORDER</h4>
+            <p class="ap-desc">Your shares sell automatically when the price rises to your target.</p>
+            <div class="ap-grid">
+              <div class="ap-left">
+                <div class="field-group"><label>TARGET PRICE (S$)</label><input type="number" id="limitSellPrice" placeholder="e.g. 210.00" step="0.01"/></div>
+                <div class="field-group" style="margin-top:12px"><label>QUANTITY</label>
+                  <div class="qty-row">
+                    <button class="qty-btn" onclick="adjustQty('limitSellQty',-1)">−</button>
+                    <input type="number" id="limitSellQty" value="1" min="1"/>
+                    <button class="qty-btn" onclick="adjustQty('limitSellQty',1)">+</button>
+                  </div>
+                </div>
+              </div>
+              <div class="cost-card sell-card">
+                <div class="cost-row"><span>CURRENT PRICE</span><strong id="limitSellCurrent">—</strong></div>
+                <div class="cost-row"><span>YOUR TARGET</span><strong id="limitSellTarget">—</strong></div>
+              </div>
+            </div>
+            <button class="ap-execute-btn sell-execute" onclick="placeLimitOrder('sell')">PLACE LIMIT SELL</button>
+            <div id="limitSellResult" class="trade-result hidden"></div>
+          </div>
+
+          <!-- WATCHLIST -->
+          <div id="ap-watchlist" class="ap-block hidden">
+            <h4 class="ap-title">👁 ADD TO WATCHLIST</h4>
+            <p class="ap-desc">Track this stock without committing any SimBucks. You'll see the live price on your Watchlist page.</p>
+            <button class="ap-execute-btn buy-execute" onclick="addCurrentToWatchlist()">+ ADD TO WATCHLIST</button>
+            <div id="watchlistResult" class="trade-result hidden"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <section class="section" style="margin-top:24px">
+        <div class="section-header"><h3>PENDING ORDERS</h3><button class="btn-sm" onclick="loadPendingOrders()">↻</button></div>
+        <div id="pendingOrders"><div class="empty-state">No pending orders</div></div>
+      </section>
+    </div>
+
+    <!-- ── CHARTS ── -->
+    <div id="panel-charts" class="panel">
+      <div class="panel-header">
+        <div><h2>Charts</h2><p class="panel-sub">Price history for any stock</p></div>
+      </div>
+      <div class="chart-controls">
+        <select id="chartDropdown" class="ticker-select" onchange="chartTickerChanged(this.value)">
+          <option value="">— Select a stock —</option>
+          <optgroup label="🖥 Technology">
+            <option value="AAPL">AAPL — Apple</option>
+            <option value="MSFT">MSFT — Microsoft</option>
+            <option value="GOOGL">GOOGL — Alphabet</option>
+            <option value="AMZN">AMZN — Amazon</option>
+            <option value="NVDA">NVDA — NVIDIA</option>
+            <option value="META">META — Meta</option>
+            <option value="TSLA">TSLA — Tesla</option>
+            <option value="AMD">AMD — AMD</option>
+            <option value="NFLX">NFLX — Netflix</option>
+          </optgroup>
+          <optgroup label="🏦 Finance">
+            <option value="JPM">JPM — JPMorgan</option>
+            <option value="GS">GS — Goldman Sachs</option>
+            <option value="V">V — Visa</option>
+            <option value="MA">MA — Mastercard</option>
+          </optgroup>
+          <optgroup label="🏥 Healthcare">
+            <option value="JNJ">JNJ — J&amp;J</option>
+            <option value="PFE">PFE — Pfizer</option>
+            <option value="UNH">UNH — UnitedHealth</option>
+          </optgroup>
+          <optgroup label="📈 ETFs">
+            <option value="SPY">SPY — S&amp;P 500</option>
+            <option value="QQQ">QQQ — NASDAQ</option>
+            <option value="DIA">DIA — Dow Jones</option>
+          </optgroup>
+        </select>
+        <div class="manual-search-row">
+          <input type="text" id="chartTickerInput" class="term-input" placeholder="Or type any ticker..."/>
+          <button class="btn-primary-sm" onclick="loadChart()">LOAD</button>
+        </div>
+        <div class="period-btns">
+          <button class="period-btn active" onclick="setPeriod('1mo','1d',this)">1M</button>
+          <button class="period-btn" onclick="setPeriod('3mo','1d',this)">3M</button>
+          <button class="period-btn" onclick="setPeriod('6mo','1wk',this)">6M</button>
+          <button class="period-btn" onclick="setPeriod('1y','1wk',this)">1Y</button>
+          <button class="period-btn" onclick="setPeriod('2y','1mo',this)">2Y</button>
+        </div>
+      </div>
+
+      <div id="chartLoading" class="loading-row hidden">Loading chart data...</div>
+      <div id="chartEmpty" class="empty-state">Select a stock above to view its price chart.</div>
+
+      <div id="chartArea" class="chart-area hidden">
+        <div class="chart-stock-header">
+          <div>
+            <span class="chart-ticker-label" id="chartTickerLabel">—</span>
+            <span class="chart-name-label" id="chartNameLabel">—</span>
+          </div>
+          <div class="chart-price-block">
+            <span class="chart-current-price" id="chartCurrentPrice">—</span>
+            <span class="chart-change" id="chartChange">—</span>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+        <div class="chart-stats-row">
+          <div class="cs-stat"><span>PERIOD HIGH</span><strong id="chartHigh">—</strong></div>
+          <div class="cs-stat"><span>PERIOD LOW</span><strong id="chartLow">—</strong></div>
+          <div class="cs-stat"><span>AVG VOLUME</span><strong id="chartVolume">—</strong></div>
+          <div class="cs-stat"><span>CHANGE %</span><strong id="chartChangePct">—</strong></div>
+        </div>
+        <div class="chart-action-row">
+          <button class="btn-buy-chart" onclick="goTradeFromChart('buy')">📈 BUY THIS STOCK</button>
+          <button class="btn-sell-chart" onclick="goTradeFromChart('sell')">📉 SELL THIS STOCK</button>
+          <button class="btn-watch-chart" onclick="goTradeFromChart('watchlist')">👁 WATCHLIST</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PORTFOLIO ── -->
+    <div id="panel-portfolio" class="panel">
+      <div class="panel-header">
+        <div><h2>Portfolio</h2><p class="panel-sub">Your holdings and trade history</p></div>
+        <button class="btn-danger" onclick="confirmReset()">↺ RESET PORTFOLIO</button>
+      </div>
+      <div class="summary-grid">
+        <div class="summary-card"><span class="summary-label">TOTAL VALUE</span><span class="summary-val" id="portTotalValue">—</span></div>
+        <div class="summary-card"><span class="summary-label">CASH</span><span class="summary-val" id="portCash">—</span></div>
+        <div class="summary-card"><span class="summary-label">INVESTED</span><span class="summary-val" id="portInvested">—</span></div>
+        <div class="summary-card"><span class="summary-label">TOTAL P&L</span><span class="summary-val" id="portPnl">—</span></div>
+      </div>
+
+      <!-- Portfolio Pie Chart -->
+      <section class="section">
+        <div class="section-header"><h3>ALLOCATION</h3></div>
+        <div class="portfolio-chart-wrap">
+          <canvas id="allocationChart" width="220" height="220"></canvas>
+          <div id="allocationLegend" class="allocation-legend"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><h3>HOLDINGS</h3></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>TICKER</th><th>QTY</th><th>AVG COST</th><th>CURRENT</th><th>VALUE</th><th>P&L</th><th>%</th><th>ACTION</th></tr></thead>
+            <tbody id="holdingsTbody"><tr><td colspan="8" class="loading-row">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-header"><h3>TRADE HISTORY</h3></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>TIME</th><th>ACTION</th><th>TICKER</th><th>QTY</th><th>PRICE</th><th>TOTAL</th></tr></thead>
+            <tbody id="tradeHistoryTbody"><tr><td colspan="6" class="loading-row">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── WATCHLIST ── -->
+    <div id="panel-watchlist" class="panel">
+      <div class="panel-header"><div><h2>Watchlist</h2><p class="panel-sub">Track stocks you're interested in</p></div></div>
+      <div class="add-watchlist-row">
+        <input type="text" id="watchlistInput" placeholder="Add ticker (e.g. NVDA)" onkeyup="if(event.key==='Enter') addToWatchlist()"/>
+        <button class="btn-primary-sm" onclick="addToWatchlist()">+ ADD</button>
+      </div>
+      <div id="watchlistItems"><div class="loading-row">Loading watchlist...</div></div>
+    </div>
+
+    <!-- ── EDUCATION ── -->
+    <div id="panel-education" class="panel">
+      <div class="panel-header">
+        <div><h2>Lessons</h2><p class="panel-sub">Learn investing from scratch — earn XP for each lesson</p></div>
+        <div class="xp-badge" id="xpBadge">⭐ 0 XP</div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-track"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+        <span id="progressLabel" class="progress-label">0 / 10 lessons completed</span>
+      </div>
+      <div id="lessonsList" class="lessons-grid"></div>
+      <div id="lessonDetail" class="lesson-detail hidden">
+        <button class="btn-back" onclick="closeLessonDetail()">← BACK TO LESSONS</button>
+        <div class="lesson-content-wrap">
+          <div class="lesson-meta"><span id="lessonDifficulty" class="difficulty-badge"></span><span id="lessonXP" class="xp-reward"></span></div>
+          <h2 id="lessonTitle"></h2>
+          <div id="lessonBody" class="lesson-body"></div>
+          <div id="quizSection" class="quiz-section hidden">
+            <h3 class="quiz-title">✏️ KNOWLEDGE CHECK</h3>
+            <div id="quizQuestions"></div>
+            <button class="btn-primary" id="submitQuizBtn" onclick="submitQuiz()">SUBMIT ANSWERS →</button>
+            <div id="quizResult" class="hidden"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GLOSSARY ── -->
+    <div id="panel-glossary" class="panel">
+      <div class="panel-header"><div><h2>Glossary</h2><p class="panel-sub">50+ financial terms explained simply</p></div></div>
+      <div class="search-row" style="margin-bottom:16px">
+        <input type="text" id="glossarySearch" placeholder="Search terms... (e.g. P/E ratio, dividend)" oninput="searchGlossary()" style="max-width:400px"/>
+      </div>
+      <div id="glossaryList" class="glossary-list"><div class="loading-row">Loading glossary...</div></div>
+    </div>
+
+    <!-- ── LEADERBOARD ── -->
+    <div id="panel-leaderboard" class="panel">
+      <div class="panel-header">
+        <div><h2>Leaderboard</h2><p class="panel-sub">Top traders by portfolio value</p></div>
+        <div id="myRankChip" class="rank-chip">My Rank: —</div>
+      </div>
+      <div class="community-stats" id="communityStats"></div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>#</th><th>TRADER</th><th>TOTAL VALUE</th><th>P&L</th><th>P&L %</th><th>XP</th></tr></thead>
+          <tbody id="leaderboardTbody"><tr><td colspan="6" class="loading-row">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PROFILE ── -->
+    <div id="panel-profile" class="panel">
+      <div class="panel-header"><div><h2>Profile</h2><p class="panel-sub">Your account and stats</p></div></div>
+      <div class="profile-layout">
+        <div class="profile-card">
+          <div class="profile-avatar" id="profileAvatar">?</div>
+          <div class="profile-username" id="profileUsername">—</div>
+          <div class="profile-email" id="profileEmail">—</div>
+          <div class="profile-joined">Member since <span id="profileJoined">—</span></div>
+          <button class="btn-danger" onclick="confirmReset()" style="margin-top:20px;width:100%">↺ RESET PORTFOLIO</button>
+          <button class="btn-logout-big" onclick="logout()">⏻ LOG OUT</button>
+        </div>
+        <div class="profile-stats-col">
+          <div class="profile-stat-grid">
+            <div class="profile-stat"><span>TOTAL VALUE</span><strong id="profTotalValue">—</strong></div>
+            <div class="profile-stat"><span>CASH BALANCE</span><strong id="profCash">—</strong></div>
+            <div class="profile-stat"><span>TOTAL P&L</span><strong id="profPnl">—</strong></div>
+            <div class="profile-stat"><span>XP POINTS</span><strong id="profXp" style="color:var(--yellow)">—</strong></div>
+            <div class="profile-stat"><span>LESSONS DONE</span><strong id="profLessons">—</strong></div>
+            <div class="profile-stat"><span>LEADERBOARD RANK</span><strong id="profRank">—</strong></div>
+          </div>
+          <div class="profile-badges" id="profileBadges"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toastContainer" class="toast-container"></div>
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="modalTitle">Confirm</h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="btn-danger" onclick="modalConfirm()">CONFIRM</button>
+      <button class="btn-ghost" onclick="closeModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
