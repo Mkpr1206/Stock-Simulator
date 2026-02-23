@@ -1,5 +1,5 @@
 import sys, os
-sys.path.insert(0, r'C:\Users\PRANAV\Desktop\stocksim')
+
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,19 +67,16 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         raise HTTPException(status_code=401, detail="User not found")
     return dict(user)
 
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-@app.get("/", tags=["Info"])
-def root():
-    return {
-        "app": "StockSim",
-        "tagline": "Learn to invest. Risk nothing real.",
-        "currency": APP_CURRENCY_NAME,
-        "starting_balance": f"{APP_CURRENCY_SYMBOL}{STARTING_BALANCE:,.0f}",
-        "real_money": False,
-        "ads": False,
-        "pro_plan": False,
-        "docs": "/docs",
-    }
+# Serve static files (JS + CSS)
+app.mount("/static", StaticFiles(directory="."), name="static")
+
+# Serve homepage
+@app.get("/")
+def serve_home():
+    return FileResponse("index.html")
 
 
 @app.post("/auth/register", tags=["Auth"])
