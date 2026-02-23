@@ -1,5 +1,5 @@
 // ── CONFIG ───────────────────────────────────────────────────────────
-const API = 'http://localhost:8000';
+const API = 'https://stock-simulator-1-vlo6.onrender.com';
 let token = localStorage.getItem('stocksim_token');
 let currentUser = null;
 let currentTicker = null;
