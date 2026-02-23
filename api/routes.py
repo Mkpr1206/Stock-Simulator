@@ -1,6 +1,3 @@
-import sys, os
-
-
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -70,15 +67,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-# Serve static files (JS + CSS)
 app.mount("/static", StaticFiles(directory="."), name="static")
 
-# Serve homepage
 @app.get("/")
 def serve_home():
     return FileResponse("index.html")
-
-
 @app.post("/auth/register", tags=["Auth"])
 def register(username: str, email: str, password: str):
     with get_db() as conn:
