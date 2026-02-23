@@ -69,7 +69,7 @@ const REGIONS = {
   US: {
     name: 'United States',
     flag: '🇺🇸',
-    currency: 'S$',
+    currency: '$',
     currencyCode: 'USD',
     exchange: 'NYSE/NASDAQ',
     suffix: '',
@@ -224,18 +224,24 @@ function detectRegion() {
   const saved = localStorage.getItem('stocksim_region');
   if (saved && REGIONS[saved]) return saved;
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g. "Asia/Kolkata"
     for (const [code, region] of Object.entries(REGIONS)) {
-      if (region.timezone.some(t => tz.startsWith(t.split('/')[0]) && tz.includes(t.split('/')[1] || ''))) {
+      if (region.timezone.some(t => tz === t || tz.startsWith(t))) {
         return code;
       }
     }
-    // Fallback: check language
+    // Broader continent matching
+    if (tz.startsWith('Asia/Cal') || tz.startsWith('Asia/Kol')) return 'IN';
+    if (tz.startsWith('Asia/To'))  return 'JP';
+    if (tz.startsWith('Asia/'))    return 'IN'; // most Asia = India fallback
+    if (tz.startsWith('Europe/'))  return 'EU';
+    if (tz.startsWith('America/')) return 'US';
+    // Language fallback
     const lang = navigator.language || '';
-    if (lang.startsWith('hi') || lang.includes('IN')) return 'IN';
+    if (lang.includes('-IN') || lang.startsWith('hi')) return 'IN';
     if (lang.startsWith('ja')) return 'JP';
+    if (lang.includes('-GB')) return 'GB';
     if (lang.startsWith('fr') || lang.startsWith('de') || lang.startsWith('es') || lang.startsWith('it')) return 'EU';
-    if (lang.includes('GB')) return 'GB';
   } catch(e) {}
   return 'US';
 }
@@ -247,7 +253,7 @@ function setRegion(code) {
   const r = REGIONS[code];
   document.querySelectorAll('.currency-sym').forEach(el => el.textContent = r.currency);
   const badge = document.getElementById('marketBadge');
-  if (badge) badge.innerHTML = `${r.flag} ${r.name} <span style="color:var(--text3)">· ${r.exchange}</span>`;
+  if (badge) badge.innerHTML = `${ef(r.flag)} ${r.name} <span style="color:var(--text3)">· ${r.exchange}</span>`;
   rebuildStockDropdowns();
   document.querySelectorAll('.region-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.region === code);
@@ -257,7 +263,7 @@ function setRegion(code) {
   });
   const banner = document.getElementById('regionDetectText');
   if (banner) banner.textContent = `${r.flag} ${r.name} market (${r.exchange})`;
-  toast(`${r.flag} Switched to ${r.name} market`, 'success');
+  toast(`Switched to ${r.flag} ${r.name} market`, 'success');
 }
 
 function rebuildStockDropdowns() {
@@ -284,7 +290,7 @@ function rebuildStockDropdowns() {
 function getCurrency() { return REGIONS[currentRegion]?.currency || 'S$'; }
 function fmtMoney(n)   { return `${getCurrency()}${fmt(n)}`; }
 
-// ── API ───────────────────────────────────────────────────────────────
+// ── API HELPERS ───────────────────────────────────────────────────────
 async function api(path, method = 'GET', body = null, auth = true) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth && token) headers['Authorization'] = `Bearer ${token}`;
@@ -297,6 +303,22 @@ async function api(path, method = 'GET', body = null, auth = true) {
     if (Array.isArray(detail)) {
       throw new Error(detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', '));
     }
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'Request failed');
+  }
+  return data;
+}
+
+// POST with query params — this is what the StockSim backend actually uses
+// e.g. POST /trade/buy?ticker=AAPL&quantity=5
+async function apiQuery(path, params = {}, auth = true) {
+  const headers = {};
+  if (auth && token) headers['Authorization'] = `Bearer ${token}`;
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(`${API}${path}?${qs}`, { method: 'POST', headers });
+  const data = await res.json();
+  if (!res.ok) {
+    const detail = data.detail;
+    if (Array.isArray(detail)) throw new Error(detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', '));
     throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'Request failed');
   }
   return data;
@@ -385,27 +407,74 @@ async function register() {
   document.getElementById('authError').classList.add('hidden');
   const err = validateUsername(username) || validateEmail(email) || validatePassword(password);
   if (err) return showAuthError(err);
-  // Read market choice from picker (falls back to auto-detected)
   const chosenRegion = document.querySelector('#regMarketPicker .market-pick-btn.selected')?.dataset.region || currentRegion;
   const btn = document.querySelector('#registerForm .btn-primary');
   btn.dataset.label = 'START WITH 100,000';
   setAuthLoading(btn, true);
+
+  // Backend uses query params (not JSON body) for register
+  // def register(username: str, email: str, password: str) — FastAPI query params
+  const attempts = [
+    // Query params — what the backend actually expects
+    () => fetch(`${API}/auth/register?username=${encodeURIComponent(username)}&email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`, { method: 'POST' }).then(async r => { const d = await r.json(); if (!r.ok) { const det = d.detail; throw new Error(Array.isArray(det) ? det.map(e=>e.msg||e.message||JSON.stringify(e)).join(', ') : (typeof det==='string'?det:JSON.stringify(det)||'Failed')); } return d; }),
+    // JSON body fallback (if backend is ever updated)
+    () => api('/auth/register', 'POST', { username, email, password }, false),
+    () => api('/auth/register', 'POST', { username, email, password, confirm_password: password }, false),
+    // Form encoded fallback
+    () => apiForm('/auth/register', { username, email, password }),
+  ];
+
+  let d = null;
+  let lastErr = '';
+  let debugLog = [];
+
+  for (const attempt of attempts) {
+    try {
+      d = await attempt();
+      break;
+    } catch(e) {
+      lastErr = e.message || '';
+      debugLog.push(lastErr);
+      // Only keep trying on field/validation/404 errors
+      if (!lastErr.includes('Field') && !lastErr.includes('Not Found') &&
+          !lastErr.includes('404') && !lastErr.includes('422') &&
+          !lastErr.includes('Unprocessable') && !lastErr.includes('required') &&
+          !lastErr.includes('value_error') && !lastErr.includes('missing')) {
+        break;
+      }
+    }
+  }
+
+  // If all attempts failed, log full debug info to console so user can report it
+  if (!d) {
+    console.error('=== StockSim Registration Debug ===');
+    console.error('All endpoints tried. Last errors:', debugLog);
+    console.error('Open your backend main.py and look for: @router.post("/auth/register")');
+    console.error('Check the Pydantic model fields required by that route');
+    console.error('====================================');
+  }
+
   try {
-    const d = await api('/auth/register', 'POST', { username, email, password }, false);
-    if (!d.access_token) throw new Error('Registration ok — please log in');
+    if (!d) throw new Error(lastErr || 'Registration failed');
+    if (!d.access_token) throw new Error('Account created — please log in with your credentials');
     token = d.access_token;
     localStorage.setItem('stocksim_token', token);
-    // Apply their chosen market
     currentRegion = chosenRegion;
     localStorage.setItem('stocksim_region', chosenRegion);
     await enterApp();
     const r = REGIONS[chosenRegion];
-    toast(`🎉 Welcome! Trading ${r.flag} ${r.name} market with 100,000 SimBucks!`, 'success');
+    toast(`\uD83C\uDF89 Welcome! Trading ${r.name} market with 100,000 SimBucks!`, 'success');
   } catch(e) {
     const msg = e.message || '';
-    if (msg.includes('fetch') || msg.includes('Failed')) showAuthError('Cannot connect to server. Start the backend: python main.py');
-    else if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('taken') || msg.toLowerCase().includes('exists')) showAuthError('Username or email already registered. Try logging in.');
-    else showAuthError(msg || 'Registration failed');
+    if (msg.includes('fetch') || msg.includes('Failed to fetch')) {
+      showAuthError('Cannot connect to server. Make sure the backend is running: python main.py');
+    } else if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('taken') || msg.toLowerCase().includes('exists')) {
+      showAuthError('Username or email already registered. Try logging in instead.');
+    } else if (msg.includes('please log in')) {
+      showAuthError('\u2713 Account created! Please log in with your username and password.');
+    } else {
+      showAuthError(msg || 'Registration failed');
+    }
   } finally { setAuthLoading(btn, false); }
 }
 function showAuthError(msg) {
@@ -438,8 +507,8 @@ async function loadCurrentUser() {
   try {
     currentUser = await api('/auth/me');
     const u = currentUser.username ?? '?';
-    const xp = currentUser.xp_points ?? currentUser.xp ?? 0;
-    const lessons = currentUser.lessons_completed ?? currentUser.completed_lessons ?? 0;
+    const xp = currentUser.xp_points ?? 0;
+    const lessons = currentUser.lessons_completed ?? 0;
     set('sidebarUsername', u);
     set('userAvatar', u[0].toUpperCase());
     set('profileAvatar', u[0].toUpperCase());
@@ -449,8 +518,6 @@ async function loadCurrentUser() {
     set('xpBadge', `⭐ ${xp} XP`);
     set('profXp', `${xp} XP`);
     set('profLessons', `${lessons} / 10`);
-    const totalVal = currentUser.portfolio_summary?.total_value ?? currentUser.balance ?? 0;
-    updateSidebarBalance(totalVal);
     updateGreeting(u);
   } catch(e) { console.warn('loadCurrentUser:', e.message); }
 }
@@ -546,10 +613,8 @@ async function loadDashHoldings() {
         </div>`;
       el.appendChild(div);
     });
-    try {
-      const b = await api('/simulator/daily-briefing');
-      if (b.tip_of_the_day) { set('tipText', b.tip_of_the_day); document.getElementById('tipSection').classList.remove('hidden'); }
-    } catch(e) {}
+    const tipSection = document.getElementById('tipSection');
+    if (tipSection) tipSection.classList.add('hidden'); // no briefing endpoint in backend
   } catch(e) { el.innerHTML = `<div class="empty-state" style="color:var(--red)">${e.message}</div>`; }
 }
 
@@ -558,6 +623,7 @@ async function loadTradeBalance() {
   try {
     const w = await api('/wallet');
     const bal = w.balance ?? w.cash ?? w.simBucks ?? 0;
+    cachedWalletBalance = Math.max(0, bal); // refresh cache too
     set('tradeBalance', fmtMoney(Math.max(0, bal)));
   } catch(e) { set('tradeBalance', '—'); }
 }
@@ -589,18 +655,25 @@ async function selectTicker(ticker) {
     set('infoTicker', currentTicker);
     set('infoName', info.name || currentTicker);
     set('infoSector', info.sector || '—');
-    set('infoPrice', `$${currentPrice.toFixed(2)}`);
+    set('infoPrice', fmtMoney(currentPrice));
+    set('infoPriceSub', `LIVE PRICE (${REGIONS[currentRegion].currencyCode})`);
     set('infoPE', info.pe_ratio ? info.pe_ratio.toFixed(1) : '—');
-    set('infoMktCap', info.market_cap ? '$' + fmtBig(info.market_cap) : '—');
+    set('infoMktCap', info.market_cap ? getCurrency() + fmtBig(info.market_cap) : '—');
     set('infoBeta', info.beta ? info.beta.toFixed(2) : '—');
     // Dividend yield — handle both decimal and percent formats
+    // Dividend yield — backend may send as decimal (0.023) or percent (2.3)
+    // Cap at 30% to catch bad data (yfinance sometimes sends garbage for non-US stocks)
     const rawDiv = info.dividend_yield ?? info.dividendYield ?? info.div_yield ?? 0;
-    const divPct = rawDiv > 1 ? rawDiv : rawDiv * 100;
-    set('infoDivYield', rawDiv ? divPct.toFixed(2) + '%' : '0%');
+    let divDisplay = '—';
+    if (rawDiv && rawDiv > 0) {
+      const divPct = rawDiv < 1 ? rawDiv * 100 : rawDiv; // convert decimal to %
+      divDisplay = divPct > 30 ? '—' : divPct.toFixed(2) + '%'; // cap bad data
+    }
+    set('infoDivYield', divDisplay);
     const high = info.fifty_two_week_high ?? info.fiftyTwoWeekHigh ?? info['52_week_high'] ?? null;
     const low  = info.fifty_two_week_low  ?? info.fiftyTwoWeekLow  ?? info['52_week_low']  ?? null;
-    set('info52High', high ? '$' + parseFloat(high).toFixed(2) : '—');
-    set('info52Low',  low  ? '$' + parseFloat(low).toFixed(2)  : '—');
+    set('info52High', high ? getCurrency() + parseFloat(high).toFixed(2) : '—');
+    set('info52Low',  low  ? getCurrency() + parseFloat(low).toFixed(2)  : '—');
     set('infoDesc', info.description || '');
     document.getElementById('stockCard').classList.remove('hidden');
     document.getElementById('actionRow').classList.remove('hidden');
@@ -621,8 +694,8 @@ function onActionChange() {
     block.classList.remove('hidden');
     if (action === 'buy') setupBuyPanel();
     if (action === 'sell') setupSellPanel();
-    if (action === 'limit_buy') set('limitCurrent', `$${currentPrice.toFixed(2)}`);
-    if (action === 'limit_sell') set('limitSellCurrent', `$${currentPrice.toFixed(2)}`);
+    if (action === 'limit_buy') set('limitCurrent', fmtMoney(currentPrice));
+    if (action === 'limit_sell') set('limitSellCurrent', fmtMoney(currentPrice));
   }
 }
 function hideAllActionPanels() { document.querySelectorAll('.ap-block').forEach(b => b.classList.add('hidden')); }
@@ -647,19 +720,27 @@ function adjustQty(id, delta) {
   if (id === 'sellQty') calcSellProceeds();
   if (id === 'limitBuyQty') calcLimitCost();
 }
+let cachedWalletBalance = null; // cache to avoid hitting /wallet on every keystroke
+
+async function refreshWalletCache() {
+  try {
+    const w = await api('/wallet');
+    cachedWalletBalance = w.balance ?? w.cash ?? w.simBucks ?? 0;
+  } catch(e) {}
+}
+
 async function calcCost() {
   const qty = parseInt(document.getElementById('execQty')?.value) || 1;
   set('previewQty', qty);
   if (!currentPrice) return;
   const total = currentPrice * qty;
   set('estCost', fmtMoney(total));
-  try {
-    const w = await api('/wallet');
-    const bal = w.balance ?? w.cash ?? 0;
-    const after = bal - total;
-    set('afterBalance', fmtMoney(after));
-    document.getElementById('afterBalance').style.color = after >= 0 ? 'var(--text)' : 'var(--red)';
-  } catch(e) {}
+  // Use cached balance — only fetch if we don't have one yet
+  if (cachedWalletBalance === null) await refreshWalletCache();
+  const bal = cachedWalletBalance ?? 0;
+  const after = bal - total;
+  set('afterBalance', fmtMoney(after));
+  document.getElementById('afterBalance').style.color = after >= 0 ? 'var(--text)' : 'var(--red)';
 }
 function calcSellProceeds() {
   const qty = parseInt(document.getElementById('sellQty')?.value) || 1;
@@ -689,128 +770,66 @@ async function executeTrade(mode) {
   const resultId = mode === 'buy' ? 'tradeResult' : 'sellResult';
   const resultEl = document.getElementById(resultId);
   resultEl.classList.add('hidden');
-  const attempts = [
-    { path: `/trade/${mode}`,     body: { ticker: currentTicker, quantity: qty } },
-    { path: `/trade/${mode}`,     body: { symbol: currentTicker, quantity: qty } },
-    { path: `/trade/${mode}`,     body: { ticker: currentTicker, shares: qty } },
-    { path: `/trade/${mode}`,     body: { ticker: currentTicker, qty } },
-    { path: `/trading/${mode}`,   body: { ticker: currentTicker, quantity: qty } },
-    { path: `/orders/${mode}`,    body: { ticker: currentTicker, quantity: qty } },
-  ];
-  let lastError = '';
-  for (const a of attempts) {
+  try {
+    // Backend uses query params: POST /trade/buy?ticker=AAPL&quantity=5
+    const res = await apiQuery(`/trade/${mode}`, { ticker: currentTicker, quantity: qty });
+    resultEl.className = 'trade-result success';
+    resultEl.textContent = res.message ?? `${mode.toUpperCase()} successful!`;
+    resultEl.classList.remove('hidden');
+    toast(res.message ?? `${mode.toUpperCase()} successful!`, 'success');
+    cachedWalletBalance = null; // invalidate so next calcCost fetches fresh balance
+    loadTradeBalance();
+    if (res.new_balance) updateSidebarBalance(res.new_balance);
     try {
-      const res = await api(a.path, 'POST', a.body);
-      resultEl.className = 'trade-result success';
-      resultEl.textContent = res.message ?? `${mode.toUpperCase()} successful!`;
-      resultEl.classList.remove('hidden');
-      toast(res.message ?? `${mode.toUpperCase()} successful!`, 'success');
-      loadTradeBalance();
-      if (res.new_balance) updateSidebarBalance(res.new_balance);
-      try {
-        const portfolio = await api('/portfolio');
-        currentHolding = (portfolio.holdings ?? portfolio.positions ?? []).find(h => h.ticker === currentTicker) || null;
-        if (mode === 'sell') setupSellPanel();
-      } catch(e) {}
-      return;
-    } catch(e) {
-      lastError = e.message;
-      if (!e.message.includes('Field') && !e.message.includes('Not Found') && !e.message.includes('404') && !e.message.includes('found')) break;
-    }
+      const portfolio = await api('/portfolio');
+      currentHolding = (portfolio.holdings ?? []).find(h => h.ticker === currentTicker) || null;
+      if (mode === 'sell') setupSellPanel();
+    } catch(e) {}
+  } catch(e) {
+    resultEl.className = 'trade-result error';
+    resultEl.textContent = e.message || `${mode} failed`;
+    resultEl.classList.remove('hidden');
+    toast(e.message || `${mode} failed`, 'error');
   }
-  resultEl.className = 'trade-result error';
-  resultEl.textContent = lastError || `${mode} failed`;
-  resultEl.classList.remove('hidden');
-  toast(lastError || `${mode} failed`, 'error');
 }
 
 async function placeLimitOrder(type) {
-  if (!currentTicker) return toast('No stock selected', 'error');
-  const priceId = type === 'buy' ? 'limitBuyPrice' : 'limitSellPrice';
-  const qtyId   = type === 'buy' ? 'limitBuyQty'   : 'limitSellQty';
-  const resId    = type === 'buy' ? 'limitBuyResult' : 'limitSellResult';
-  const price = parseFloat(document.getElementById(priceId)?.value);
-  const qty   = parseInt(document.getElementById(qtyId)?.value);
-  if (!price || !qty) return toast('Fill in price and quantity', 'error');
+  // Backend doesn't have limit orders yet — show friendly message
+  toast('Limit orders coming soon! For now, use market buy/sell.', 'info');
+  const resId = type === 'buy' ? 'limitBuyResult' : 'limitSellResult';
   const resultEl = document.getElementById(resId);
-  resultEl.classList.add('hidden');
-  const body = { ticker: currentTicker, quantity: qty, limit_price: price, price };
-  const paths = [`/orders/limit-${type}`, `/orders/limit_${type}`, `/trade/limit-${type}`, `/trade/limit_${type}`, `/trade/limit`, `/orders/limit`];
-  let lastError = '';
-  for (const path of paths) {
-    try {
-      const res = await api(path, 'POST', { ...body, order_type: `limit_${type}`, action: type.toUpperCase() });
-      resultEl.className = 'trade-result success';
-      resultEl.textContent = res.message ?? 'Limit order placed!';
-      resultEl.classList.remove('hidden');
-      toast(res.message ?? 'Limit order placed!', 'success');
-      loadPendingOrders();
-      return;
-    } catch(e) {
-      lastError = e.message;
-      if (!e.message.includes('Not Found') && !e.message.includes('404') && !e.message.includes('Field')) break;
-    }
-  }
-  resultEl.className = 'trade-result error';
-  resultEl.textContent = lastError || 'Limit order failed';
+  resultEl.className = 'trade-result';
+  resultEl.style.borderColor = 'var(--accent2)';
+  resultEl.textContent = '⏳ Limit orders are not yet available in this version of the backend.';
   resultEl.classList.remove('hidden');
-  toast(lastError, 'error');
 }
 
 async function addCurrentToWatchlist() {
   if (!currentTicker) return;
   const resultEl = document.getElementById('watchlistResult');
   resultEl.classList.add('hidden');
-  const attempts = [
-    { path: '/watchlist',     body: { ticker: currentTicker } },
-    { path: '/watchlist',     body: { symbol: currentTicker } },
-    { path: '/watchlist/add', body: { ticker: currentTicker } },
-  ];
-  for (const a of attempts) {
-    try {
-      await api(a.path, 'POST', a.body);
-      resultEl.className = 'trade-result success';
-      resultEl.textContent = `✓ ${currentTicker} added to your watchlist`;
-      resultEl.classList.remove('hidden');
-      toast(`${currentTicker} added to watchlist`, 'success');
-      return;
-    } catch(e) {
-      if (!e.message.includes('Field') && !e.message.includes('Not Found') && !e.message.includes('404')) {
-        resultEl.className = 'trade-result error';
-        resultEl.textContent = e.message;
-        resultEl.classList.remove('hidden');
-        return;
-      }
-    }
+  try {
+    // Backend: POST /watchlist?ticker=AAPL  (query param)
+    await apiQuery('/watchlist', { ticker: currentTicker });
+    resultEl.className = 'trade-result success';
+    resultEl.textContent = `✓ ${currentTicker} added to your watchlist`;
+    resultEl.classList.remove('hidden');
+    toast(`${currentTicker} added to watchlist`, 'success');
+  } catch(e) {
+    resultEl.className = 'trade-result error';
+    resultEl.textContent = e.message.includes('Already') ? `${currentTicker} is already on your watchlist` : e.message;
+    resultEl.classList.remove('hidden');
   }
-  resultEl.className = 'trade-result error';
-  resultEl.textContent = 'Could not add to watchlist';
-  resultEl.classList.remove('hidden');
 }
 
 async function loadPendingOrders() {
+  // Backend has no /orders endpoint — hide section gracefully
   const el = document.getElementById('pendingOrders');
-  try {
-    const orders = await api('/orders/pending');
-    const list = Array.isArray(orders) ? orders : (orders.orders ?? orders.pending ?? []);
-    if (!list.length) { el.innerHTML = '<div class="empty-state">No pending orders</div>'; return; }
-    el.innerHTML = '';
-    list.forEach(o => {
-      const div = document.createElement('div');
-      div.className = 'order-row';
-      div.innerHTML = `
-        <div class="order-info">
-          <span class="order-action ${o.action === 'BUY' ? 'tag-buy' : 'tag-sell'}">${o.action}</span>
-          <strong>${o.quantity}x ${o.ticker}</strong> @ ${fmtMoney(o.limit_price)}
-        </div>
-        <button class="btn-cancel" onclick="cancelOrder(${o.id})">CANCEL</button>`;
-      el.appendChild(div);
-    });
-  } catch(e) { el.innerHTML = '<div class="empty-state">Could not load orders</div>'; }
+  el.innerHTML = '<div class="empty-state" style="font-size:11px">Limit orders not yet available in backend</div>';
 }
+
 async function cancelOrder(id) {
-  try { await api(`/orders/${id}`, 'DELETE'); toast('Order cancelled', 'info'); loadPendingOrders(); }
-  catch(e) { toast(e.message, 'error'); }
+  toast('Order cancellation not available in this backend version', 'info');
 }
 
 // ── CHARTS ────────────────────────────────────────────────────────────
@@ -848,21 +867,25 @@ async function fetchChart() {
     const price = priceData.price || 0;
     set('chartTickerLabel', currentChartTicker);
     set('chartNameLabel', info.name || currentChartTicker);
-    set('chartCurrentPrice', `$${price.toFixed(2)}`);
-    const labels = hist.dates || Object.keys(hist.close || {});
-    const closes = hist.close ? (Array.isArray(hist.close) ? hist.close : Object.values(hist.close)) : [];
+    set('chartCurrentPrice', fmtMoney(price));
+    // Backend returns: { ticker, period, data: { Close: {"date": val}, Volume: {"date": val} } }
+    const raw = hist.data || hist;
+    const closeObj = raw.Close || raw.close || raw.closes || {};
+    const volumeObj = raw.Volume || raw.volume || {};
+    const labels = Object.keys(closeObj);
+    const closes = Object.values(closeObj).map(Number);
     if (closes.length > 1) {
       const change = closes[closes.length-1] - closes[0];
       const changePct = ((change / closes[0]) * 100).toFixed(2);
       const changeEl = document.getElementById('chartChange');
-      changeEl.textContent = `${change >= 0 ? '+' : ''}$${Math.abs(change).toFixed(2)} (${change >= 0 ? '+' : ''}${changePct}%)`;
+      changeEl.textContent = `${change >= 0 ? '+' : ''}${getCurrency()}${Math.abs(change).toFixed(2)} (${change >= 0 ? '+' : ''}${changePct}%)`;
       changeEl.style.color = change >= 0 ? 'var(--green)' : 'var(--red)';
       set('chartChangePct', `${change >= 0 ? '+' : ''}${changePct}%`);
       document.getElementById('chartChangePct').style.color = change >= 0 ? 'var(--green)' : 'var(--red)';
-      set('chartHigh', `$${Math.max(...closes).toFixed(2)}`);
-      set('chartLow',  `$${Math.min(...closes).toFixed(2)}`);
+      set('chartHigh', fmtMoney(Math.max(...closes)));
+      set('chartLow',  fmtMoney(Math.min(...closes)));
     }
-    const volumes = hist.volume ? (Array.isArray(hist.volume) ? hist.volume : Object.values(hist.volume)) : [];
+    const volumes = Object.values(volumeObj).map(Number).filter(v => v > 0);
     if (volumes.length) set('chartVolume', fmtBig(volumes.reduce((a,b)=>a+b,0)/volumes.length));
     drawPriceChart(labels, closes);
   } catch(e) {
@@ -882,10 +905,10 @@ function drawPriceChart(labels, data) {
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { intersect: false, mode: 'index' },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0f1217', borderColor: '#1e2530', borderWidth: 1, titleColor: '#8896a8', bodyColor: '#e2e8f0', callbacks: { label: ctx => ` $${ctx.parsed.y.toFixed(2)}` } } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0f1217', borderColor: '#1e2530', borderWidth: 1, titleColor: '#8896a8', bodyColor: '#e2e8f0', callbacks: { label: ctx => ` ${getCurrency()}${ctx.parsed.y.toFixed(2)}` } } },
       scales: {
         x: { ticks: { color: '#4a5568', font: { family: 'Space Mono', size: 10 }, maxTicksLimit: 8 }, grid: { color: '#1e2530' } },
-        y: { position: 'right', ticks: { color: '#8896a8', font: { family: 'Space Mono', size: 10 }, callback: v => '$' + v.toFixed(0) }, grid: { color: '#1e2530' } }
+        y: { position: 'right', ticks: { color: '#8896a8', font: { family: 'Space Mono', size: 10 }, callback: v => getCurrency() + v.toFixed(0) }, grid: { color: '#1e2530' } }
       }
     }
   });
@@ -988,16 +1011,8 @@ async function quickSell(ticker, qty) {
   set('modalMessage', `This will sell all ${qty} shares of ${ticker} at market price.`);
   pendingModalAction = async () => {
     try {
-      let res;
-      const attempts = [
-        { path: '/trade/sell', body: { ticker, quantity: qty } },
-        { path: '/trade/sell', body: { symbol: ticker, quantity: qty } },
-        { path: '/trade/sell', body: { ticker, shares: qty } },
-      ];
-      for (const a of attempts) {
-        try { res = await api(a.path, 'POST', a.body); break; }
-        catch(e) { if (!e.message.includes('Field') && !e.message.includes('404')) throw e; }
-      }
+      // Backend: POST /trade/sell?ticker=AAPL&quantity=5
+      const res = await apiQuery('/trade/sell', { ticker, quantity: qty });
       toast(res?.message || `Sold ${qty} shares of ${ticker}`, 'success');
       loadPortfolio(); loadDashboard();
     } catch(e) { toast(`Sell failed: ${e.message}`, 'error'); }
@@ -1038,7 +1053,7 @@ async function loadWatchlist() {
           <div class="wi-added">Added ${fmtDate(item.added_at)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:16px">
-          <div class="wi-price">${item.current_price > 0 ? '$' + item.current_price.toFixed(2) : '—'}</div>
+          <div class="wi-price">${item.current_price > 0 ? getCurrency() + item.current_price.toFixed(2) : '—'}</div>
           <button class="btn-remove" onclick="removeFromWatchlist('${item.ticker}')">✕</button>
         </div>`;
       el.appendChild(div);
@@ -1048,16 +1063,24 @@ async function loadWatchlist() {
 async function addToWatchlist() {
   const ticker = document.getElementById('watchlistInput').value.trim().toUpperCase();
   if (!ticker) return;
-  const attempts = [{ path: '/watchlist', body: { ticker } }, { path: '/watchlist', body: { symbol: ticker } }];
-  for (const a of attempts) {
-    try { await api(a.path, 'POST', a.body); document.getElementById('watchlistInput').value = ''; toast(`${ticker} added to watchlist`, 'success'); loadWatchlist(); return; }
-    catch(e) { if (!e.message.includes('Field') && !e.message.includes('404')) { toast(e.message, 'error'); return; } }
+  try {
+    // Backend: POST /watchlist?ticker=AAPL
+    await apiQuery('/watchlist', { ticker });
+    document.getElementById('watchlistInput').value = '';
+    toast(`${ticker} added to watchlist`, 'success');
+    loadWatchlist();
+  } catch(e) {
+    toast(e.message.includes('Already') ? `${ticker} already on watchlist` : e.message, 'error');
   }
-  toast('Could not add — check server', 'error');
 }
 async function removeFromWatchlist(ticker) {
-  try { await api(`/watchlist/${ticker}`, 'DELETE'); toast(`${ticker} removed`, 'info'); loadWatchlist(); }
-  catch(e) { toast(e.message, 'error'); }
+  try {
+    // Try DELETE endpoint first, fallback to POST with remove action
+    try { await api(`/watchlist/${ticker}`, 'DELETE'); }
+    catch(e) { await apiQuery(`/watchlist/${ticker}`, {}, true); }
+    toast(`${ticker} removed from watchlist`, 'info');
+    loadWatchlist();
+  } catch(e) { toast(`Could not remove ${ticker}: ${e.message}`, 'error'); }
 }
 
 // ── EDUCATION — ENHANCED ──────────────────────────────────────────────
@@ -1204,9 +1227,9 @@ function buildLessonProgress(currentId) {
   const el = document.getElementById('lessonProgressSteps');
   if (!el) return;
   const allIds = [1,2,3,4,5,6,7,8,9,10];
-  el.innerHTML = allIds.map(id => `
-    <div class="lp-step ${id === currentId ? 'lp-current' : ''} ${completedLessonIds.has(id) ? 'lp-done' : ''}" onclick="id !== ${currentId} && openLesson(${id})" title="Lesson ${id}">
-      ${completedLessonIds.has(id) ? '✓' : id}
+  el.innerHTML = allIds.map(lessonId => `
+    <div class="lp-step ${lessonId === currentId ? 'lp-current' : ''} ${completedLessonIds.has(lessonId) ? 'lp-done' : ''}" onclick="openLesson(${lessonId})" title="Lesson ${lessonId}">
+      ${completedLessonIds.has(lessonId) ? '✓' : lessonId}
     </div>`).join('');
 }
 
@@ -1247,10 +1270,17 @@ function buildQuiz(questions) {
 }
 
 async function submitQuiz() {
+  const total = currentLesson?.quiz?.length || 0;
   const answers = [];
-  for (let i = 0; i < (currentLesson?.quiz?.length || 0); i++) {
+  let unanswered = 0;
+  for (let i = 0; i < total; i++) {
     const sel = document.querySelector(`[name="q${i}"]:checked`);
+    if (!sel) unanswered++;
     answers.push(sel ? parseInt(sel.value) : -1);
+  }
+  if (unanswered > 0) {
+    const proceed = confirm(`You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Submit anyway? Unanswered questions will be marked wrong.`);
+    if (!proceed) return;
   }
   try {
     const result = await api(`/education/lessons/${currentLessonId}/quiz`, 'POST', { answers });
@@ -1328,17 +1358,19 @@ async function loadLeaderboard() {
   tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Loading...</td></tr>';
   cs.innerHTML    = '';
   try {
-    const [boardRaw, statsRaw] = await Promise.all([
-      api('/leaderboard', 'GET', null, false),
-      api('/leaderboard/stats', 'GET', null, false)
-    ]);
-    const board = Array.isArray(boardRaw) ? boardRaw : (boardRaw.leaderboard ?? boardRaw.users ?? []);
+    const boardRaw = await api('/leaderboard', 'GET', null, false);
+    const statsRaw = await api('/leaderboard/stats', 'GET', null, false).catch(() => ({}));
+    const board = Array.isArray(boardRaw) ? boardRaw : (boardRaw.leaderboard ?? []);
     const stats = statsRaw ?? {};
     cs.innerHTML = `
       <div class="cs-card"><div class="cs-label">TRADERS</div><div class="cs-val">${stats.total_traders ?? board.length}</div></div>
       <div class="cs-card"><div class="cs-label">TOTAL TRADES</div><div class="cs-val">${stats.total_trades ?? '—'}</div></div>
       <div class="cs-card"><div class="cs-label">AVG BALANCE</div><div class="cs-val">${fmtMoney(stats.average_balance ?? 0)}</div></div>`;
-    try { const my = await api('/leaderboard/me'); if (my?.rank) set('myRankChip', `My Rank: #${my.rank}`); } catch(e) {}
+    // Find current user in leaderboard for rank
+    if (currentUser) {
+      const myEntry = board.find(e => e.username === currentUser.username);
+      if (myEntry?.rank) { set('myRankChip', `My Rank: #${myEntry.rank}`); set('profRank', '#' + myEntry.rank); }
+    }
     if (!board.length) { tbody.innerHTML = '<tr><td colspan="6" class="loading-row">No traders yet</td></tr>'; return; }
     tbody.innerHTML = '';
     board.forEach((e, i) => {
@@ -1378,6 +1410,10 @@ async function loadProfile() {
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────
+// Windows Chrome renders emoji flags as ¤ when Space Mono is the active font.
+// Always wrap flags in an emoji-font span for innerHTML contexts.
+const EMOJI_STYLE = `font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif`;
+function ef(flag) { return `<span style="${EMOJI_STYLE}">${flag}</span>`; }
 function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 function fmt(n) { return parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtBig(n) {
@@ -1405,14 +1441,14 @@ function buildRegionSwitcher() {
   const splash = document.getElementById('regionSwitcher');
   if (splash) {
     splash.innerHTML = Object.entries(REGIONS).map(([code, r]) =>
-      `<button class="region-btn ${code === currentRegion ? 'active' : ''}" data-region="${code}" onclick="setRegion('${code}')" title="${r.name}">${r.flag}</button>`
+      `<button class="region-btn ${code === currentRegion ? 'active' : ''}" data-region="${code}" onclick="setRegion('${code}')" title="${r.name}">${ef(r.flag)}</button>`
     ).join('');
   }
   // Sidebar compact flags
   const sidebar = document.getElementById('regionSwitcherSidebar');
   if (sidebar) {
     sidebar.innerHTML = Object.entries(REGIONS).map(([code, r]) =>
-      `<button class="region-btn-sidebar ${code === currentRegion ? 'active' : ''}" data-region="${code}" onclick="setRegion('${code}')">${r.flag} ${r.name}</button>`
+      `<button class="region-btn-sidebar ${code === currentRegion ? 'active' : ''}" data-region="${code}" onclick="setRegion('${code}')">${ef(r.flag)} ${r.name}</button>`
     ).join('');
   }
   // Registration full-card market picker
@@ -1432,7 +1468,7 @@ function buildRegMarketPicker() {
   if (!el) return;
   el.innerHTML = Object.entries(REGIONS).map(([code, r]) => `
     <button class="market-pick-btn ${code === currentRegion ? 'selected' : ''}" data-region="${code}" onclick="selectRegMarket('${code}')">
-      <span class="mpb-flag">${r.flag}</span>
+      <span class="mpb-flag">${ef(r.flag)}</span>
       <span class="mpb-name">${r.name}</span>
       <span class="mpb-ex">${r.exchange}</span>
       <span class="mpb-cur">${r.currency}</span>
@@ -1459,7 +1495,7 @@ function buildProfileMarketCards() {
   if (!el) return;
   el.innerHTML = Object.entries(REGIONS).map(([code, r]) => `
     <div class="market-card ${code === currentRegion ? 'market-card-active' : ''}" onclick="switchMarketFromProfile('${code}')">
-      <div class="mc-flag">${r.flag}</div>
+      <div class="mc-flag">${ef(r.flag)}</div>
       <div class="mc-info">
         <div class="mc-name">${r.name}</div>
         <div class="mc-exchange">${r.exchange} · ${r.currency}</div>
@@ -1471,8 +1507,9 @@ function buildProfileMarketCards() {
 
 function switchMarketFromProfile(code) {
   if (code === currentRegion) return;
-  set('modalTitle', `Switch to ${REGIONS[code].flag} ${REGIONS[code].name}?`);
-  set('modalMessage', `Your stock dropdown, currency symbol and featured stocks will update to ${REGIONS[code].name}. Existing holdings are unaffected.`);
+  const r = REGIONS[code];
+  set('modalTitle', `Switch to ${r.name}?`);
+  set('modalMessage', `Your stock dropdown, currency (${r.currency}) and featured stocks will update to ${r.name} (${r.exchange}). Existing holdings are unaffected.`);
   pendingModalAction = () => { setRegion(code); buildProfileMarketCards(); loadDashboard(); };
   document.getElementById('modal').classList.remove('hidden');
 }
