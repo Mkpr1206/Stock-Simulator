@@ -379,24 +379,35 @@ function setAuthLoading(btn, loading) {
   if (span) span.textContent = loading ? 'PLEASE WAIT...' : (btn.dataset.label || span.textContent);
 }
 async function login() {
-  const username = document.getElementById('loginUsername').value.trim().toLowerCase();
+  const usernameOrEmail = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
   document.getElementById('authError').classList.add('hidden');
-  if (!username) return showAuthError('Please enter your username');
+  if (!usernameOrEmail) return showAuthError('Please enter your username or email');
   if (!password) return showAuthError('Please enter your password');
   const btn = document.querySelector('#loginForm .btn-primary');
   btn.dataset.label = btn.dataset.label || 'ENTER MARKET';
   setAuthLoading(btn, true);
   try {
-    const d = await apiForm('/auth/login', { username, password });
+    // Try as username first, then as email if that fails
+    let d = null;
+    try {
+      d = await apiForm('/auth/login', { username: usernameOrEmail.toLowerCase(), password });
+    } catch(e) {
+      // If login failed and input looks like email, try email lookup
+      if (usernameOrEmail.includes('@')) {
+        d = await apiForm('/auth/login-email', { email: usernameOrEmail.toLowerCase(), password });
+      } else {
+        throw e;
+      }
+    }
     if (!d.access_token) throw new Error('No token received');
     token = d.access_token;
     localStorage.setItem('stocksim_token', token);
     await enterApp();
   } catch(e) {
     const msg = e.message || '';
-    if (msg.includes('fetch') || msg.includes('Failed')) showAuthError('Cannot connect to server. Start the backend: python main.py');
-    else if (msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid')) showAuthError('Wrong username or password. Try demo_alice / demo1234');
+    if (msg.includes('fetch') || msg.includes('Failed')) showAuthError('Cannot connect to server.');
+    else if (msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid')) showAuthError('Wrong username/email or password. Try demo_alice / demo1234');
     else showAuthError(msg || 'Login failed');
   } finally { setAuthLoading(btn, false); }
 }
@@ -514,12 +525,37 @@ async function loadCurrentUser() {
     set('profileAvatar', u[0].toUpperCase());
     set('profileUsername', u);
     set('profileEmail', currentUser.email || '—');
-    set('profileJoined', fmtDate(currentUser.created_at ?? currentUser.joined_at));
+    const joined = currentUser.created_at ?? currentUser.joined_at ?? currentUser.member_since ?? null;
+    set('profileJoined', joined ? fmtDate(joined) : 'recently');
     set('xpBadge', `⭐ ${xp} XP`);
     set('profXp', `${xp} XP`);
     set('profLessons', `${lessons} / 10`);
     updateGreeting(u);
   } catch(e) { console.warn('loadCurrentUser:', e.message); }
+}
+
+function confirmDeleteAccount() {
+  set('modalTitle', '⚠ Delete Account?');
+  set('modalMessage', 'This permanently deletes your account, portfolio, and all trade history. This cannot be undone.');
+  pendingModalAction = deleteAccount;
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+async function deleteAccount() {
+  try {
+    await api('/auth/delete', 'DELETE');
+    toast('Account deleted. Goodbye!', 'info');
+  } catch(e) {
+    // Even if endpoint fails, clear local session
+    toast('Account deleted locally.', 'info');
+  }
+  setTimeout(() => {
+    localStorage.removeItem('stocksim_token');
+    localStorage.removeItem('stocksim_region');
+    token = null;
+    currentUser = null;
+    location.reload();
+  }, 1500);
 }
 function updateSidebarBalance(v) { set('sidebarBalance', `${getCurrency()}${fmt(v)}`); }
 function updateGreeting(u) {
@@ -1025,8 +1061,38 @@ function confirmReset() {
   pendingModalAction = resetPortfolio;
   document.getElementById('modal').classList.remove('hidden');
 }
-function closeModal() { document.getElementById('modal').classList.add('hidden'); pendingModalAction = null; }
-function modalConfirm() { closeModal(); if (pendingModalAction) pendingModalAction(); }
+function confirmDeleteAccount() {
+  set('modalTitle', '⚠ Delete Account?');
+  set('modalMessage', 'This permanently deletes your account, portfolio, trade history and wallet. This CANNOT be undone.');
+  // Override modal buttons for this action
+  const confirmBtn = document.querySelector('#modal .btn-danger');
+  const cancelBtn  = document.querySelector('#modal .btn-ghost');
+  confirmBtn.textContent = 'YES, DELETE EVERYTHING';
+  confirmBtn.style.background = '#ff1a1a';
+  cancelBtn.textContent = 'CANCEL';
+  pendingModalAction = deleteAccount;
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+async function deleteAccount() {
+  try {
+    await api('/auth/account', 'DELETE');
+    toast('Account deleted. Goodbye!', 'info');
+    // Clear all local data and return to splash
+    localStorage.removeItem('stocksim_token');
+    localStorage.removeItem('stocksim_region');
+    token = null;
+    currentUser = null;
+    setTimeout(() => {
+      document.getElementById('app').classList.add('hidden');
+      document.getElementById('splash').classList.remove('hidden');
+      document.getElementById('splash').classList.add('active');
+    }, 1500);
+  } catch(e) {
+    toast(`Delete failed: ${e.message}`, 'error');
+  }
+}
+
 async function resetPortfolio() {
   try {
     const r = await api('/wallet/reset', 'POST');

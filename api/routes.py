@@ -146,11 +146,13 @@ def register(username: str, email: str, password: str):
 def login(form: OAuth2PasswordRequestForm = Depends()):
     try:
         with get_db() as conn:
+            # Accept username OR email in the username field
             user = conn.execute(
-                "SELECT * FROM users WHERE username=?", (form.username,)
+                "SELECT * FROM users WHERE username=? OR email=?",
+                (form.username, form.username.lower())
             ).fetchone()
         if not user or not bcrypt.checkpw(form.password.encode(), user["password_hash"].encode()):
-            raise HTTPException(401, "Incorrect username or password")
+            raise HTTPException(401, "Incorrect username/email or password")
         token = create_access_token({"user_id": user["id"], "username": user["username"]})
         return {"access_token": token, "token_type": "bearer", "username": user["username"]}
     except HTTPException:
@@ -159,7 +161,42 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(500, f"Login error: {str(e)}")
 
 
-@app.get("/auth/me", tags=["Auth"])
+@app.delete("/auth/account", tags=["Auth"])
+def delete_account(current_user: dict = Depends(get_current_user)):
+    """Permanently delete the current user's account and all associated data."""
+    user_id = current_user["id"]
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM watchlist WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM wallets WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM trades WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM holdings WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM lesson_progress WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        return {"message": "Account permanently deleted."}
+    except Exception as e:
+        raise HTTPException(500, f"Delete failed: {str(e)}")
+
+
+@app.post("/auth/login-email", tags=["Auth"])
+def login_by_email(email: str, password: str):
+    """Login using email address instead of username."""
+    try:
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT * FROM users WHERE email=?", (email.lower(),)
+            ).fetchone()
+        if not user or not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
+            raise HTTPException(401, "Incorrect email or password")
+        token = create_access_token({"user_id": user["id"], "username": user["username"]})
+        return {"access_token": token, "token_type": "bearer", "username": user["username"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Login error: {str(e)}")
+
+
+
 def get_me(current_user: dict = Depends(get_current_user)):
     return {
         "id": current_user["id"],

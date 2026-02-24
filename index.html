@@ -34,7 +34,7 @@
         <button class="auth-tab" onclick="switchTab('register')">REGISTER</button>
       </div>
       <div id="loginForm" class="auth-form active">
-        <div class="field-group"><label>USERNAME</label><input type="text" id="loginUsername" placeholder="your_username" onkeyup="if(event.key==='Enter')login()"/></div>
+        <div class="field-group"><label>USERNAME OR EMAIL</label><input type="text" id="loginUsername" placeholder="username or email" onkeyup="if(event.key==='Enter')login()"/></div>
         <div class="field-group"><label>PASSWORD</label><input type="password" id="loginPassword" placeholder="••••••••" onkeyup="if(event.key==='Enter')login()"/></div>
         <button class="btn-primary" onclick="login()"><span>ENTER MARKET</span><span>→</span></button>
         <p class="demo-hint">Demo: <code>demo_alice</code> / <code>demo1234</code></p>
@@ -467,6 +467,7 @@
           <div class="profile-joined">Member since <span id="profileJoined">—</span></div>
           <button class="btn-danger" onclick="confirmReset()" style="margin-top:20px;width:100%">↺ RESET PORTFOLIO</button>
           <button class="btn-logout-big" onclick="logout()">⏻ LOG OUT</button>
+          <button class="btn-delete-account" onclick="confirmDeleteAccount()">✕ DELETE ACCOUNT</button>
         </div>
         <div class="profile-stats-col">
           <div class="profile-stat-grid">
