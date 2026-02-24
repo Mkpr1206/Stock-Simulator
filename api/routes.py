@@ -142,7 +142,24 @@ def register(username: str, email: str, password: str):
         raise HTTPException(500, f"Registration error: {str(e)}")
 
 
-@app.post("/auth/login", tags=["Auth"])
+@app.delete("/auth/account", tags=["Auth"])
+def delete_account(current_user: dict = Depends(get_current_user)):
+    """Permanently delete the current user's account, portfolio, wallet and watchlist."""
+    user_id = current_user["id"]
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM trades WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM holdings WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM wallets WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM watchlist WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM lesson_progress WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        return {"message": "Account permanently deleted"}
+    except Exception as e:
+        raise HTTPException(500, f"Delete failed: {str(e)}")
+
+
+
 def login(form: OAuth2PasswordRequestForm = Depends()):
     try:
         with get_db() as conn:
