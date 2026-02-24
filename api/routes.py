@@ -15,13 +15,19 @@ from core.simulator import MarketSimulator
 from education.lessons import get_all_lessons_summary, get_lesson, grade_quiz
 from education.glossary import get_all_terms, get_term
 from education.scenarios import get_all_scenarios
-from data.db import get_db
+from data.db import get_db, init_db
+from data.seed import seed_database
 from config import (
     SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES,
     REAL_MONEY_PURCHASABLE, ADS_ENABLED, PRO_PLAN_EXISTS,
     FEATURED_TICKERS, APP_CURRENCY_NAME, APP_CURRENCY_SYMBOL,
     STARTING_BALANCE
 )
+
+# Auto-initialize database on startup (required for cloud deployment)
+# Render doesn't have our local .db file, so we create it fresh every deploy
+init_db()
+seed_database()
 
 app = FastAPI(
     title="StockSim API",
