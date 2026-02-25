@@ -511,7 +511,6 @@ function logout() {
   cachedWalletBalance = null;
   currentTicker = null; currentPrice = 0; currentHolding = null;
   currentChartTicker = null;
-  set('profRank', '—');
   ['loginUsername','loginPassword','regUsername','regEmail','regPassword'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -1446,23 +1445,19 @@ function searchGlossary() {
   renderGlossary(allGlossaryTerms.filter(t => t.term.toLowerCase().includes(q) || t.definition.toLowerCase().includes(q)));
 }
 
-// ── LEADERBOARD ───────────────────────────────────────────────────────
 
 // ── PROFILE ───────────────────────────────────────────────────────────
 async function loadProfile() {
-  set('profRank', '—'); // clear stale rank from previous user
   buildProfileMarketCards(); // always render market switcher immediately
   try {
     const [p] = await Promise.all([api('/portfolio')]);
-    const myRank = null;
     const total = p.total_value ?? p.portfolio_value ?? 0;
     const gl = p.total_gain_loss ?? p.gain_loss ?? 0;
     set('profTotalValue', fmtMoney(total));
     set('profCash', fmtMoney(p.cash ?? p.cash_balance ?? 0));
     const profPnl = document.getElementById('profPnl');
     if (profPnl) { profPnl.textContent = `${gl>=0?'+':''}${fmtMoney(gl)}`; profPnl.style.color = gl>=0?'var(--green)':'var(--red)'; }
-    set('profRank', '—');
-    const badges = [];
+      const badges = [];
     if ((currentUser?.lessons_completed||0) >= 1)  badges.push({ icon:'📚', label:'First Lesson' });
     if ((currentUser?.lessons_completed||0) >= 5)  badges.push({ icon:'🎓', label:'Halfway There' });
     if ((currentUser?.lessons_completed||0) >= 10) badges.push({ icon:'🏆', label:'Graduate' });
