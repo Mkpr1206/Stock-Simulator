@@ -291,12 +291,24 @@ function getCurrency() { return REGIONS[currentRegion]?.currency || 'S$'; }
 function fmtMoney(n)   { return `${getCurrency()}${fmt(n)}`; }
 
 // ── API HELPERS ───────────────────────────────────────────────────────
+// ── fetchWithTimeout: prevents infinite hang on Render free tier spin-up ────
+function fetchWithTimeout(url, opts = {}, ms = 20000) {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...opts, signal: controller.signal })
+    .finally(() => clearTimeout(tid))
+    .catch(err => {
+      if (err.name === 'AbortError') throw new Error('Server took too long to respond. It may be waking up — please try again in 30 seconds.');
+      throw err;
+    });
+}
+
 async function api(path, method = 'GET', body = null, auth = true) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth && token) headers['Authorization'] = `Bearer ${token}`;
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
+  const res = await fetchWithTimeout(API + path, opts);
   const data = await res.json();
   if (!res.ok) {
     const detail = data.detail;
@@ -314,7 +326,7 @@ async function apiQuery(path, params = {}, auth = true) {
   const headers = {};
   if (auth && token) headers['Authorization'] = `Bearer ${token}`;
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${API}${path}?${qs}`, { method: 'POST', headers });
+  const res = await fetchWithTimeout(`${API}${path}?${qs}`, { method: 'POST', headers });
   const data = await res.json();
   if (!res.ok) {
     const detail = data.detail;
@@ -324,7 +336,7 @@ async function apiQuery(path, params = {}, auth = true) {
   return data;
 }
 async function apiForm(path, body) {
-  const res = await fetch(API + path, {
+  const res = await fetchWithTimeout(API + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body).toString()
