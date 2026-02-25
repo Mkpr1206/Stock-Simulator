@@ -166,10 +166,10 @@ def delete_account(current_user: dict = Depends(get_current_user)):
 def login(form: OAuth2PasswordRequestForm = Depends()):
     try:
         with get_db() as conn:
-            # Accept username OR email in the username field
+            # Accept username OR email, case-insensitive for both
             user = conn.execute(
-                "SELECT * FROM users WHERE username=? OR email=?",
-                (form.username, form.username.lower())
+                "SELECT * FROM users WHERE LOWER(username)=LOWER(?) OR LOWER(email)=LOWER(?)",
+                (form.username, form.username)
             ).fetchone()
         if not user or not bcrypt.checkpw(form.password.encode(), user["password_hash"].encode()):
             raise HTTPException(401, "Incorrect username/email or password")
