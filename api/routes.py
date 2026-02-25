@@ -163,6 +163,7 @@ def delete_account(current_user: dict = Depends(get_current_user)):
 
 
 
+@app.post("/auth/login", tags=["Auth"])
 def login(form: OAuth2PasswordRequestForm = Depends()):
     try:
         with get_db() as conn:
@@ -181,21 +182,7 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(500, f"Login error: {str(e)}")
 
 
-@app.delete("/auth/account", tags=["Auth"])
-def delete_account(current_user: dict = Depends(get_current_user)):
-    """Permanently delete the current user's account and all associated data."""
-    user_id = current_user["id"]
-    try:
-        with get_db() as conn:
-            conn.execute("DELETE FROM watchlist WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM wallets WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM trades WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM holdings WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM lesson_progress WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM users WHERE id=?", (user_id,))
-        return {"message": "Account permanently deleted."}
-    except Exception as e:
-        raise HTTPException(500, f"Delete failed: {str(e)}")
+
 
 
 @app.post("/auth/login-email", tags=["Auth"])
@@ -217,6 +204,7 @@ def login_by_email(email: str, password: str):
 
 
 
+@app.get("/auth/me", tags=["Auth"])
 def get_me(current_user: dict = Depends(get_current_user)):
     return {
         "id": current_user["id"],
