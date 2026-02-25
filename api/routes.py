@@ -97,10 +97,7 @@ def info():
 
 # ── Auth ──────────────────────────────────────────────────────────────
 @app.post("/auth/register", tags=["Auth"])
-def register(data: RegisterRequest):
-    username = data.username
-    email = data.email
-    password = data.password 
+def register(username: str, email: str, password: str):
     if len(username) < 3:
         raise HTTPException(400, "Username must be at least 3 characters")
     if "@" not in email:
