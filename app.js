@@ -400,18 +400,8 @@ async function login() {
   btn.dataset.label = btn.dataset.label || 'ENTER MARKET';
   setAuthLoading(btn, true);
   try {
-    // Try as username first, then as email if that fails
-    let d = null;
-    try {
-      d = await apiForm('/auth/login', { username: usernameOrEmail.toLowerCase(), password });
-    } catch(e) {
-      // If login failed and input looks like email, try email lookup
-      if (usernameOrEmail.includes('@')) {
-        d = await apiForm('/auth/login-email', { email: usernameOrEmail.toLowerCase(), password });
-      } else {
-        throw e;
-      }
-    }
+    // Single login call — backend accepts username OR email, case-insensitive
+    const d = await apiForm('/auth/login', { username: usernameOrEmail, password });
     if (!d.access_token) throw new Error('No token received');
     token = d.access_token;
     localStorage.setItem('stocksim_token', token);
