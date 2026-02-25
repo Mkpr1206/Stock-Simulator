@@ -27,7 +27,10 @@ from config import (
 # Auto-initialize database on startup (required for cloud deployment)
 # Render doesn't have our local .db file, so we create it fresh every deploy
 init_db()
-seed_database()
+try:
+    seed_database()
+except Exception:
+    pass  # Already seeded — safe to ignore on redeploy
 
 app = FastAPI(
     title="StockSim API",
@@ -221,6 +224,7 @@ def get_me(current_user: dict = Depends(get_current_user)):
         "email": current_user["email"],
         "xp_points": current_user.get("xp_points", 0),
         "lessons_completed": current_user.get("lessons_completed", 0),
+        "created_at": current_user.get("created_at", None),
     }
 
 
@@ -258,10 +262,19 @@ def get_history(ticker: str, period: str = "1y", interval: str = "1d"):
 
 
 @app.get("/market/featured", tags=["Market"])
-def get_featured():
+def get_featured(region: str = "US"):
+    """Returns featured tickers for the given region. region=IN|US|GB|JP|EU"""
+    REGION_TICKERS = {
+        "IN": ["TCS.NS", "INFY.NS", "HDFCBANK.NS", "RELIANCE.NS", "WIPRO.NS"],
+        "US": ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"],
+        "GB": ["SHEL.L", "HSBA.L", "ULVR.L", "BP.L", "VOD.L"],
+        "JP": ["7203.T", "6758.T", "9984.T", "8306.T", "6861.T"],
+        "EU": ["MC.PA", "ASML.AS", "SAP", "SIE.DE", "OR.PA"],
+    }
+    tickers = REGION_TICKERS.get(region.upper(), FEATURED_TICKERS)
     try:
-        prices = market.get_prices_bulk(FEATURED_TICKERS)
-        return [{"ticker": t, "price": prices.get(t, 0)} for t in FEATURED_TICKERS]
+        prices = market.get_prices_bulk(tickers)
+        return [{"ticker": t, "price": prices.get(t, 0)} for t in tickers]
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -305,7 +318,11 @@ def get_portfolio(current_user: dict = Depends(get_current_user)):
 @app.get("/portfolio/trades", tags=["Portfolio"])
 def get_trades(limit: int = 50, current_user: dict = Depends(get_current_user)):
     try:
-        return Portfolio(current_user["id"]).get_trade_history()
+        history = Portfolio(current_user["id"]).get_trade_history()
+        # Respect limit param — return most recent trades first
+        if isinstance(history, list):
+            return history[:limit]
+        return history
     except Exception:
         return []
 

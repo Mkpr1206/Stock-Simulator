@@ -496,18 +496,33 @@ function showAuthError(msg) {
 function logout() {
   localStorage.removeItem('stocksim_token');
   token = null; currentUser = null;
-  document.getElementById('app').classList.remove('active');
-  document.getElementById('splash').classList.add('active');
+  cachedWalletBalance = null;
+  currentTicker = null; currentPrice = 0; currentHolding = null;
+  currentChartTicker = null;
+  set('profRank', '—');
   ['loginUsername','loginPassword','regUsername','regEmail','regPassword'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('authError').classList.add('hidden');
+  location.reload();
 }
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  pendingModalAction = null;
+  // Reset modal buttons to default (delete account modal changes them)
+  const confirmBtn = document.querySelector('#modal .btn-danger');
+  const cancelBtn  = document.querySelector('#modal .btn-ghost');
+  if (confirmBtn) { confirmBtn.textContent = 'CONFIRM'; confirmBtn.style.background = ''; }
+  if (cancelBtn)  { cancelBtn.textContent  = 'CANCEL'; }
+}
+function modalConfirm() { closeModal(); if (pendingModalAction) pendingModalAction(); }
 async function enterApp() {
   document.getElementById('splash').classList.remove('active');
   document.getElementById('app').classList.add('active');
-  // Detect and apply region BEFORE loading anything
-  currentRegion = detectRegion();
+  // Only detect region if not already set (preserve registration choice)
+  if (!localStorage.getItem('stocksim_region')) {
+    currentRegion = detectRegion();
+  }
   setRegion(currentRegion);
   try { await loadCurrentUser(); } catch(e) { console.warn('loadCurrentUser:', e); }
   loadDashboard();
@@ -534,34 +549,11 @@ async function loadCurrentUser() {
   } catch(e) { console.warn('loadCurrentUser:', e.message); }
 }
 
-function confirmDeleteAccount() {
-  set('modalTitle', '⚠ Delete Account?');
-  set('modalMessage', 'This permanently deletes your account, portfolio, and all trade history. This cannot be undone.');
-  pendingModalAction = deleteAccount;
-  document.getElementById('modal').classList.remove('hidden');
-}
-
-async function deleteAccount() {
-  try {
-    await api('/auth/delete', 'DELETE');
-    toast('Account deleted. Goodbye!', 'info');
-  } catch(e) {
-    // Even if endpoint fails, clear local session
-    toast('Account deleted locally.', 'info');
-  }
-  setTimeout(() => {
-    localStorage.removeItem('stocksim_token');
-    localStorage.removeItem('stocksim_region');
-    token = null;
-    currentUser = null;
-    location.reload();
-  }, 1500);
-}
 function updateSidebarBalance(v) { set('sidebarBalance', `${getCurrency()}${fmt(v)}`); }
 function updateGreeting(u) {
   const h = new Date().getHours();
   const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  set('dashGreeting', `${g}, ${u}. ${REGIONS[currentRegion].flag} ${REGIONS[currentRegion].name} market`);
+  set('dashGreeting', `${g}, ${u}. ${REGIONS[currentRegion].name} market`);
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────
@@ -599,7 +591,7 @@ async function loadFeatured() {
   const grid = document.getElementById('featuredGrid');
   grid.innerHTML = '<div class="loading-row">Fetching live prices...</div>';
   try {
-    const data = await api('/market/featured', 'GET', null, false);
+    const data = await api(`/market/featured?region=${currentRegion}`, 'GET', null, false);
     grid.innerHTML = '';
     data.forEach(item => {
       const chip = document.createElement('div');
@@ -1454,6 +1446,7 @@ async function loadLeaderboard() {
 
 // ── PROFILE ───────────────────────────────────────────────────────────
 async function loadProfile() {
+  set('profRank', '—'); // clear stale rank from previous user
   buildProfileMarketCards(); // always render market switcher immediately
   try {
     const [p, myRank] = await Promise.all([api('/portfolio'), api('/leaderboard/me').catch(() => null)]);
@@ -1489,16 +1482,36 @@ function fmtBig(n) {
   if (n>=1e6)  return (n/1e6).toFixed(1)+'M';
   return n.toLocaleString();
 }
-function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '—';
+  return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
 
 function initTickerTape() {
   const r = REGIONS[currentRegion];
-  const tickers = Object.values(r.stocks).flat().slice(0,10).map(s => s.l.split(' — ')[0] + ' loading...');
+  const tickerObjs = Object.values(r.stocks).flat().slice(0, 10);
   const tape = document.getElementById('tickerTape');
-  if (tape) {
-    const content = tickers.join('  ·  ');
-    tape.innerHTML = `<div class="ticker-tape-inner">${content}  ·  ${content}</div>`;
-  }
+  if (!tape) return;
+  const render = arr => {
+    const joined = arr.join('  ·  ');
+    tape.innerHTML = '<div class="ticker-tape-inner">' + joined + '  ·  ' + joined + '</div>';
+  };
+  // Show placeholders immediately
+  render(tickerObjs.map(s => s.l.split(' — ')[0] + ' ...'));
+  // Fetch real prices in background
+  Promise.allSettled(tickerObjs.map(s =>
+    fetch(API + '/market/price/' + s.v).then(r => r.json()).catch(() => null)
+  )).then(results => {
+    render(tickerObjs.map((s, i) => {
+      const name = s.l.split(' — ')[0];
+      const res = results[i];
+      return (res.status === 'fulfilled' && res.value && res.value.price)
+        ? name + ' ' + getCurrency() + res.value.price.toFixed(2)
+        : name;
+    }));
+  });
 }
 
 // ── REGION SWITCHER UI ────────────────────────────────────────────────
