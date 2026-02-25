@@ -527,7 +527,17 @@ function closeModal() {
   if (confirmBtn) { confirmBtn.textContent = 'CONFIRM'; confirmBtn.style.background = ''; }
   if (cancelBtn)  { cancelBtn.textContent  = 'CANCEL'; }
 }
-function modalConfirm() { closeModal(); if (pendingModalAction) pendingModalAction(); }
+async function modalConfirm() {
+  const confirmBtn = document.querySelector('#modal .btn-danger');
+  if (confirmBtn) { confirmBtn.textContent = 'PLEASE WAIT...'; confirmBtn.disabled = true; }
+  const action = pendingModalAction;
+  closeModal();
+  if (confirmBtn) { confirmBtn.textContent = 'CONFIRM'; confirmBtn.disabled = false; }
+  if (action) {
+    try { await action(); }
+    catch(e) { toast(e.message || 'Action failed', 'error'); }
+  }
+}
 async function enterApp() {
   document.getElementById('splash').classList.remove('active');
   document.getElementById('app').classList.add('active');
@@ -575,7 +585,7 @@ function showPanel(name) {
   document.getElementById(`panel-${name}`)?.classList.add('active');
   document.querySelector(`[data-panel="${name}"]`)?.classList.add('active');
   const loaders = { dashboard: loadDashboard, portfolio: loadPortfolio, watchlist: loadWatchlist,
-    education: loadLessons, glossary: loadGlossary, leaderboard: loadLeaderboard,
+    education: loadLessons, glossary: loadGlossary,
     trade: loadTradeBalance, profile: loadProfile, charts: () => {} };
   loaders[name]?.();
 }
@@ -810,14 +820,26 @@ async function executeTrade(mode) {
   const resultId = mode === 'buy' ? 'tradeResult' : 'sellResult';
   const resultEl = document.getElementById(resultId);
   resultEl.classList.add('hidden');
+  toast(`Processing ${mode}...`, 'info');
   try {
     // Backend uses query params: POST /trade/buy?ticker=AAPL&quantity=5
-    const res = await apiQuery(`/trade/${mode}`, { ticker: currentTicker, quantity: qty });
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const url = `${API}/trade/${mode}?ticker=${encodeURIComponent(currentTicker)}&quantity=${qty}`;
+    const rawRes = await fetchWithTimeout(url, { method: 'POST', headers });
+    const text = await rawRes.text();
+    let res;
+    try { res = JSON.parse(text); }
+    catch(e) { throw new Error(`Server error: ${text.substring(0, 100)}`); }
+    if (!rawRes.ok) {
+      const detail = res.detail;
+      throw new Error(Array.isArray(detail) ? detail.map(e=>e.msg||e).join(', ') : (typeof detail==='string' ? detail : text.substring(0,100)));
+    }
     resultEl.className = 'trade-result success';
     resultEl.textContent = res.message ?? `${mode.toUpperCase()} successful!`;
     resultEl.classList.remove('hidden');
     toast(res.message ?? `${mode.toUpperCase()} successful!`, 'success');
-    cachedWalletBalance = null; // invalidate so next calcCost fetches fresh balance
+    cachedWalletBalance = null;
     loadTradeBalance();
     if (res.new_balance) updateSidebarBalance(res.new_balance);
     try {
@@ -1050,12 +1072,15 @@ async function quickSell(ticker, qty) {
   set('modalTitle', `Sell all ${ticker}?`);
   set('modalMessage', `This will sell all ${qty} shares of ${ticker} at market price.`);
   pendingModalAction = async () => {
+    toast(`Selling ${qty} shares of ${ticker}...`, 'info');
     try {
-      // Backend: POST /trade/sell?ticker=AAPL&quantity=5
       const res = await apiQuery('/trade/sell', { ticker, quantity: qty });
-      toast(res?.message || `Sold ${qty} shares of ${ticker}`, 'success');
+      toast(res?.message || `Sold ${qty} shares of ${ticker}!`, 'success');
+      cachedWalletBalance = null;
       loadPortfolio(); loadDashboard();
-    } catch(e) { toast(`Sell failed: ${e.message}`, 'error'); }
+    } catch(e) {
+      toast(`Sell failed: ${e.message}`, 'error');
+    }
   };
   document.getElementById('modal').classList.remove('hidden');
 }
@@ -1422,53 +1447,21 @@ function searchGlossary() {
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────
-async function loadLeaderboard() {
-  const tbody = document.getElementById('leaderboardTbody');
-  const cs    = document.getElementById('communityStats');
-  tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Loading...</td></tr>';
-  cs.innerHTML    = '';
-  try {
-    const boardRaw = await api('/leaderboard', 'GET', null, false);
-    const statsRaw = await api('/leaderboard/stats', 'GET', null, false).catch(() => ({}));
-    const board = Array.isArray(boardRaw) ? boardRaw : (boardRaw.leaderboard ?? []);
-    const stats = statsRaw ?? {};
-    cs.innerHTML = `
-      <div class="cs-card"><div class="cs-label">TRADERS</div><div class="cs-val">${stats.total_traders ?? board.length}</div></div>
-      <div class="cs-card"><div class="cs-label">TOTAL TRADES</div><div class="cs-val">${stats.total_trades ?? '—'}</div></div>
-      <div class="cs-card"><div class="cs-label">AVG BALANCE</div><div class="cs-val">${fmtMoney(stats.average_balance ?? 0)}</div></div>`;
-    // Find current user in leaderboard for rank
-    if (currentUser) {
-      const myEntry = board.find(e => e.username === currentUser.username);
-      if (myEntry?.rank) { set('myRankChip', `My Rank: #${myEntry.rank}`); set('profRank', '#' + myEntry.rank); }
-    }
-    if (!board.length) { tbody.innerHTML = '<tr><td colspan="6" class="loading-row">No traders yet</td></tr>'; return; }
-    tbody.innerHTML = '';
-    board.forEach((e, i) => {
-      const rank = e.rank ?? (i+1);
-      const gl   = e.gain_loss ?? e.total_gain_loss ?? 0;
-      const glPct= e.gain_loss_pct ?? e.total_gain_loss_pct ?? 0;
-      const cl = gl >= 0 ? 'pos' : 'neg';
-      const tr = document.createElement('tr');
-      tr.className = rank <= 3 ? `rank-${rank}` : '';
-      tr.innerHTML = `<td>${rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank}</td><td><strong>${e.username}</strong></td><td>${fmtMoney(e.total_value??e.portfolio_value??0)}</td><td class="${cl}">${gl>=0?'+':''}${fmtMoney(gl)}</td><td class="${cl}">${glPct>=0?'+':''}${(glPct||0).toFixed(2)}%</td><td style="color:var(--yellow)">${e.xp_points??e.xp??0} XP</td>`;
-      tbody.appendChild(tr);
-    });
-  } catch(e) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--red);padding:12px">${e.message}</td></tr>`; cs.innerHTML = ''; }
-}
 
 // ── PROFILE ───────────────────────────────────────────────────────────
 async function loadProfile() {
   set('profRank', '—'); // clear stale rank from previous user
   buildProfileMarketCards(); // always render market switcher immediately
   try {
-    const [p, myRank] = await Promise.all([api('/portfolio'), api('/leaderboard/me').catch(() => null)]);
+    const [p] = await Promise.all([api('/portfolio')]);
+    const myRank = null;
     const total = p.total_value ?? p.portfolio_value ?? 0;
     const gl = p.total_gain_loss ?? p.gain_loss ?? 0;
     set('profTotalValue', fmtMoney(total));
     set('profCash', fmtMoney(p.cash ?? p.cash_balance ?? 0));
     const profPnl = document.getElementById('profPnl');
     if (profPnl) { profPnl.textContent = `${gl>=0?'+':''}${fmtMoney(gl)}`; profPnl.style.color = gl>=0?'var(--green)':'var(--red)'; }
-    if (myRank?.rank) set('profRank', '#' + myRank.rank);
+    set('profRank', '—');
     const badges = [];
     if ((currentUser?.lessons_completed||0) >= 1)  badges.push({ icon:'📚', label:'First Lesson' });
     if ((currentUser?.lessons_completed||0) >= 5)  badges.push({ icon:'🎓', label:'Halfway There' });

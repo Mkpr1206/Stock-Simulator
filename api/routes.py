@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from core.market import MarketData
 from core.portfolio import Portfolio, InsufficientSharesError
 from core.wallet import Wallet, InsufficientFundsError
-from core.leaderboard import Leaderboard
 from core.simulator import MarketSimulator
 from education.lessons import get_all_lessons_summary, get_lesson, grade_quiz
 from education.glossary import get_all_terms, get_term
@@ -457,33 +456,3 @@ def list_scenarios():
     except Exception:
         return []
 
-
-# ── Leaderboard ───────────────────────────────────────────────────────
-@app.get("/leaderboard", tags=["Leaderboard"])
-def get_leaderboard():
-    try:
-        return Leaderboard().get_top_performers()
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.get("/leaderboard/stats", tags=["Leaderboard"])
-def community_stats():
-    try:
-        return Leaderboard().get_community_stats()
-    except Exception:
-        return {"total_traders": 0, "total_trades": 0, "average_balance": 0}
-
-
-@app.get("/leaderboard/me", tags=["Leaderboard"])
-def my_rank(current_user: dict = Depends(get_current_user)):
-    """Return the current user's rank on the leaderboard."""
-    try:
-        board = Leaderboard().get_top_performers()
-        board_list = board if isinstance(board, list) else board.get("leaderboard", [])
-        for entry in board_list:
-            if entry.get("username") == current_user["username"]:
-                return {"rank": entry.get("rank"), "username": current_user["username"]}
-        return {"rank": None, "username": current_user["username"]}
-    except Exception:
-        return {"rank": None, "username": current_user["username"]}
