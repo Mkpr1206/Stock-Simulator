@@ -72,13 +72,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Optional static files (don't crash if dir missing)
-try:
-    from fastapi.staticfiles import StaticFiles
-    if (BASE_DIR / "static").exists():
-        app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-except Exception:
-    pass
+from fastapi.staticfiles import StaticFiles
+app.mount("/static", StaticFiles(directory=str(BASE_DIR)), name="static")
 
 oauth2_scheme     = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 oauth2_scheme_req = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -150,6 +145,14 @@ def serve_home():
         return FileResponse(str(index))
     return JSONResponse({"message": "StockSim API v1.1 — see /docs", "status": "ok"})
 
+
+@app.get("/app.js", include_in_schema=False)
+def serve_js():
+    return FileResponse(str(BASE_DIR / "app.js"), media_type="application/javascript")
+
+@app.get("/style.css", include_in_schema=False)
+def serve_css():
+    return FileResponse(str(BASE_DIR / "style.css"), media_type="text/css")
 
 @app.get("/health")
 def health():
