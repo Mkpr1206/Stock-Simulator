@@ -144,13 +144,43 @@ class MarketData:
     def _mock_price(self, ticker: str) -> float:
         import random
         mock = {
+            # US
             "AAPL": 189.50, "MSFT": 415.20, "GOOGL": 178.30, "AMZN": 198.75,
             "TSLA": 245.60, "NVDA": 875.00, "META": 525.40, "JPM": 210.80,
             "V": 285.00, "MA": 490.30, "BRK-B": 380.00, "JNJ": 152.30,
+            "WMT": 68.50, "KO": 61.20, "MCD": 295.00, "NKE": 92.40,
+            "PG": 165.00, "SBUX": 78.30, "XOM": 112.50, "CVX": 158.00,
+            "SPY": 520.00, "QQQ": 445.00, "DIA": 390.00, "VTI": 258.00,
+            "AMD": 165.00, "NFLX": 625.00, "ADBE": 480.00, "BAC": 38.50,
+            "GS": 495.00, "ABBV": 172.00, "PFE": 28.50, "UNH": 540.00,
+            # India (NSE) — prices in INR
             "TCS.NS": 3950.0, "INFY.NS": 1780.0, "RELIANCE.NS": 2850.0,
             "HDFCBANK.NS": 1650.0, "WIPRO.NS": 520.0, "ICICIBANK.NS": 1240.0,
             "ITC.NS": 445.0, "SBIN.NS": 780.0, "HINDUNILVR.NS": 2400.0,
-            "BAJFINANCE.NS": 7200.0, "GSK.L": 1720.0, "7203.T": 3200.0,
+            "BAJFINANCE.NS": 7200.0, "KOTAKBANK.NS": 1850.0, "AXISBANK.NS": 1120.0,
+            "HCLTECH.NS": 1680.0, "TECHM.NS": 1520.0, "NESTLEIND.NS": 2250.0,
+            "BRITANNIA.NS": 5100.0, "ONGC.NS": 265.0, "NTPC.NS": 355.0,
+            "POWERGRID.NS": 295.0, "BPCL.NS": 310.0, "NIFTYBEES.NS": 245.0,
+            "BANKBEES.NS": 490.0, "ADANIENT.NS": 2450.0, "TATAMOTORS.NS": 940.0,
+            "TATASTEEL.NS": 145.0,
+            # UK (LSE) — prices in GBp (pence)
+            "GSK.L": 1720.0, "AZN.L": 11200.0, "HSBA.L": 720.0,
+            "BP.L": 485.0, "SHEL.L": 2680.0, "ULVR.L": 3850.0,
+            "DGE.L": 2450.0, "MKS.L": 395.0, "VOD.L": 68.0,
+            "BT-A.L": 145.0, "LLOY.L": 58.0, "BARC.L": 255.0,
+            "NWG.L": 395.0, "RIO.L": 5200.0,
+            # Japan (TSE) — prices in JPY
+            "7203.T": 3200.0, "9984.T": 8900.0, "6758.T": 12500.0,
+            "8306.T": 1580.0, "9432.T": 4200.0, "7974.T": 7800.0,
+            "6861.T": 65000.0, "4519.T": 4800.0, "8058.T": 3100.0,
+            "9433.T": 4050.0, "9983.T": 41000.0,
+            # Europe — prices in EUR
+            "ASML.AS": 720.0, "SAP.DE": 195.0, "TTE.PA": 62.0,
+            "MC.PA": 680.0, "AIR.PA": 165.0, "SIE.DE": 185.0,
+            "NESN.SW": 95.0, "ROG.SW": 265.0, "NOVN.SW": 92.0,
+            "LVMH.PA": 680.0, "BNP.PA": 65.0, "AXA.PA": 35.0,
+            "DB": 16.50, "SAP": 195.0, "ASML": 720.0,
+            "VWAGY": 7.80, "BMWYY": 35.0, "TTFCF": 62.0,
         }
         base = mock.get(ticker, 100.0)
         return round(base * (1 + random.uniform(-0.02, 0.02)), 2)
