@@ -53,12 +53,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount(
-    "/static",
-    StaticFiles(directory=str(BASE_DIR)),
-    name="static"
-)
-
+app.mount("/static", StaticFiles(directory="."), name="static")(
+    
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 market = MarketData()
 simulator = MarketSimulator()
