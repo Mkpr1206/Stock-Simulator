@@ -1,19 +1,21 @@
+import os
+
 # ── Currency ──────────────────────────────────────────────────────────────────
-STARTING_BALANCE       = 100_000.0      # SimBucks every new user receives
+STARTING_BALANCE       = 100_000.0
 APP_CURRENCY_NAME      = "SimBucks"
 APP_CURRENCY_SYMBOL    = "S$"
 
 # ── Hard Rules (DO NOT CHANGE) ────────────────────────────────────────────────
-REAL_MONEY_PURCHASABLE = False          # SimBucks can NEVER be bought with real money
-ADS_ENABLED            = False          # No advertisements, ever
-PRO_PLAN_EXISTS        = False          # No premium tier — equal access for all
-PAYMENT_GATEWAY        = None           # No payment integration
+REAL_MONEY_PURCHASABLE = False
+ADS_ENABLED            = False
+PRO_PLAN_EXISTS        = False
+PAYMENT_GATEWAY        = None
 
 # ── Market Data ───────────────────────────────────────────────────────────────
 DATA_SOURCE                  = "yfinance"
 MARKET_REFRESH_INTERVAL_SECS = 60
 DEFAULT_HISTORICAL_PERIOD    = "1y"
-SUPPORTED_EXCHANGES          = ["NYSE", "NASDAQ", "AMEX"]
+SUPPORTED_EXCHANGES          = ["NYSE", "NASDAQ", "AMEX", "NSE", "BSE", "LSE", "TSE"]
 
 # ── Trading Rules ─────────────────────────────────────────────────────────────
 MIN_TRADE_QUANTITY    = 1
@@ -32,21 +34,24 @@ LEADERBOARD_ENABLED   = True
 LEADERBOARD_TOP_N     = 50
 
 # ── Authentication ────────────────────────────────────────────────────────────
-SECRET_KEY            = "stocksim-dev-secret-change-in-production"
-JWT_ALGORITHM         = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+# FIX: Read SECRET_KEY from environment variable on Render.
+# Set this in Render dashboard → Environment → SECRET_KEY
+# Fallback to dev key when running locally.
+SECRET_KEY                  = os.getenv("SECRET_KEY", "stocksim-dev-secret-change-in-production")
+JWT_ALGORITHM               = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7   # 7 days
 
 # ── Database ──────────────────────────────────────────────────────────────────
-DATABASE_URL          = "sqlite:///./stocksim.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./stocksim.db")
 
 # ── Education ─────────────────────────────────────────────────────────────────
-TOTAL_LESSONS         = 10
-QUIZ_PASS_SCORE       = 0.7
+TOTAL_LESSONS  = 10
+QUIZ_PASS_SCORE = 0.7
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
-MAX_WATCHLIST_SIZE    = 50
+MAX_WATCHLIST_SIZE = 50
 
-# ── Popular starter tickers (shown on dashboard) ──────────────────────────────
+# ── Featured tickers shown on dashboard ───────────────────────────────────────
 FEATURED_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
     "NVDA", "META", "BRK-B", "JPM", "JNJ",
