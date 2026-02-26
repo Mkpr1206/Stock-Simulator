@@ -58,21 +58,23 @@ def create_access_token(data: dict) -> str:
     return jwt.encode({**data, "exp": expire}, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id: int = payload.get("user_id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+@router.delete("/auth/account")
+def delete_account(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+
     with get_db() as conn:
-        user = conn.execute(
-            "SELECT * FROM users WHERE id=? AND is_active=1", (user_id,)
-        ).fetchone()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return dict(user)
+        # Delete dependent records first
+        conn.execute("DELETE FROM trades WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM portfolio WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM watchlist WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM wallet WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM education_progress WHERE user_id=?", (user_id,))
+
+        # Now delete user
+        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        conn.commit()
+
+    return {"message": "Account deleted successfully"}
 
 
 # ── Root ──────────────────────────────────────────────────────────────
