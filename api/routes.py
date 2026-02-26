@@ -31,7 +31,7 @@ from config import (
 
 # ── Setup ─────────────────────────────────────────────────────────────
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 init_db()
 try:
@@ -53,7 +53,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory=str(BASE_DIR)), name="static")
+app.mount(
+    "/static",
+    StaticFiles(directory=str(BASE_DIR)),
+    name="static"
+)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 market = MarketData()
@@ -89,7 +93,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
 
 @app.get("/", include_in_schema=False)
 def serve_home():
-    return FileResponse("index.html")
+    return FileResponse(str(BASE_DIR / "index.html"))
 
 # ── Auth ──────────────────────────────────────────────────────────────
 
