@@ -209,25 +209,21 @@ class MarketData:
         except Exception as e:
             raise MarketClosedError(str(e))
 
-    def get_historical_dict(self, ticker: str, period: str = "1y") -> list:
-        df      = self.get_historical(ticker, period)
-        df      = df.reset_index()
-        records = []
+    def get_historical_dict(self, ticker: str, period: str = "1y") -> dict:
+        """Returns {Close: {date: price}, Volume: {date: vol}} — matches frontend expectation."""
+        df = self.get_historical(ticker, period)
+        df = df.reset_index()
+        close_dict  = {}
+        volume_dict = {}
         for _, row in df.iterrows():
             try:
                 d = row["Date"]
                 date_str = str(d.date()) if hasattr(d, "date") else str(d)[:10]
-                records.append({
-                    "date":   date_str,
-                    "open":   round(float(row["Open"]),  2),
-                    "high":   round(float(row["High"]),  2),
-                    "low":    round(float(row["Low"]),   2),
-                    "close":  round(float(row["Close"]), 2),
-                    "volume": int(row.get("Volume", 0)),
-                })
+                close_dict[date_str]  = round(float(row["Close"]), 2)
+                volume_dict[date_str] = int(row.get("Volume", 0))
             except Exception:
                 continue
-        return records
+        return {"Close": close_dict, "Volume": volume_dict}
 
     def _mock_historical(self) -> pd.DataFrame:
         dates  = pd.date_range(end=datetime.today(), periods=252, freq="B")
