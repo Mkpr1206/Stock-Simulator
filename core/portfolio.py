@@ -1,6 +1,3 @@
-import sys, os
-sys.path.insert(0, r'C:\Users\PRANAV\Desktop\stocksim')
-
 from typing import List
 from data.db import get_db
 from core.market import MarketData

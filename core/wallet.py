@@ -1,6 +1,3 @@
-import sys, os
-sys.path.insert(0, r'C:\Users\PRANAV\Desktop\stocksim')
-
 from data.db import get_db
 from config import STARTING_BALANCE, APP_CURRENCY_NAME, APP_CURRENCY_SYMBOL, ALLOW_PORTFOLIO_RESET, MAX_RESETS_PER_DAY
 
