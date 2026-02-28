@@ -1,6 +1,3 @@
-import sys, os
-sys.path.insert(0, r'C:\Users\PRANAV\Desktop\stocksim')
-
 from config import QUIZ_PASS_SCORE
 
 LESSONS = [

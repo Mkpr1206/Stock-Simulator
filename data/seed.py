@@ -31,10 +31,8 @@ def _hash_password(password: str) -> str:
 def seed_database():
     """Insert demo users if they don't already exist."""
     with get_db() as conn:
-        cursor = conn.cursor()
-
         for user in DEMO_USERS:
-            existing = cursor.execute(
+            existing = conn.execute(
                 "SELECT id FROM users WHERE username=?", (user["username"],)
             ).fetchone()
 
@@ -42,22 +40,24 @@ def seed_database():
                 continue
 
             # Insert user
-            cursor.execute("""
+            conn.execute("""
                 INSERT INTO users (username, email, password_hash, xp_points)
                 VALUES (?, ?, ?, ?)
             """, (user["username"], user["email"], _hash_password(user["password"]), 100))
 
-            user_id = cursor.lastrowid
+            user_id = conn.execute(
+                "SELECT id FROM users WHERE username=?", (user["username"],)
+            ).fetchone()["id"]
 
             # Create wallet
-            cursor.execute("""
+            conn.execute("""
                 INSERT INTO wallets (user_id, balance, total_deposited)
                 VALUES (?, ?, ?)
             """, (user_id, STARTING_BALANCE, STARTING_BALANCE))
 
         # Seed some demo holdings for demo users
         for trade in DEMO_TRADES:
-            row = cursor.execute(
+            row = conn.execute(
                 "SELECT id FROM users WHERE username=?", (trade["username"],)
             ).fetchone()
             if not row:
@@ -67,13 +67,13 @@ def seed_database():
             total = trade["qty"] * trade["price"]
 
             # Deduct from wallet
-            cursor.execute(
+            conn.execute(
                 "UPDATE wallets SET balance = balance - ? WHERE user_id=?",
                 (total, user_id)
             )
 
             # Upsert holdings
-            existing_holding = cursor.execute(
+            existing_holding = conn.execute(
                 "SELECT id, quantity, avg_cost FROM holdings WHERE user_id=? AND ticker=?",
                 (user_id, trade["ticker"])
             ).fetchone()
@@ -83,18 +83,18 @@ def seed_database():
                 old_cost = existing_holding["avg_cost"]
                 new_qty = old_qty + trade["qty"]
                 new_avg = ((old_qty * old_cost) + total) / new_qty
-                cursor.execute(
+                conn.execute(
                     "UPDATE holdings SET quantity=?, avg_cost=? WHERE id=?",
                     (new_qty, new_avg, existing_holding["id"])
                 )
             else:
-                cursor.execute(
+                conn.execute(
                     "INSERT INTO holdings (user_id, ticker, quantity, avg_cost) VALUES (?,?,?,?)",
                     (user_id, trade["ticker"], trade["qty"], trade["price"])
                 )
 
             # Record trade
-            cursor.execute("""
+            conn.execute("""
                 INSERT INTO trades (user_id, action, ticker, quantity, price, total_value, order_type)
                 VALUES (?,?,?,?,?,?,?)
             """, (user_id, trade["action"], trade["ticker"], trade["qty"], trade["price"], total, "market"))

@@ -1,6 +1,3 @@
-import sys, os
-sys.path.insert(0, r'C:\Users\PRANAV\Desktop\stocksim')
-
 GLOSSARY = {
     "stock": {"definition": "A share of ownership in a company.", "related": ["share", "equity", "dividend"]},
     "share": {"definition": "A single unit of ownership in a company. Same as a stock.", "related": ["stock"]},

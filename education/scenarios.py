@@ -1,6 +1,3 @@
-import sys, os
-sys.path.insert(0, r'C:\Users\PRANAV\Desktop\stocksim')
-
 SCENARIOS = [
     {"id": 1, "title": "The Complete Beginner", "difficulty": "Beginner", "xp_reward": 100,
      "description": "Make your very first stock purchase.",
