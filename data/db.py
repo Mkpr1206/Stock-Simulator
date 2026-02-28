@@ -38,8 +38,12 @@ if USE_POSTGRES:
 
         @property
         def lastrowid(self):
-            self._cur.execute("SELECT lastval()")
-            return self._cur.fetchone()[0]
+            try:
+                self._cur.execute("SELECT lastval()")
+                row = self._cur.fetchone()
+                return row[0] if row else None
+            except Exception:
+                return None
 
     class PGConnWrapper:
         """Wraps psycopg2 connection so conn.execute() works like sqlite3."""
@@ -307,4 +311,6 @@ else:
                 )
             """)
             print("[DB] SQLite tables ensured.")
+
+
 
