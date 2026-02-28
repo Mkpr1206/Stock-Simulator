@@ -22,6 +22,7 @@ if USE_POSTGRES:
             self._cur = cursor
 
         def _fix(self, sql):
+            sql = sql.replace("datetime('now')", "NOW()")
             return sql.replace("?", "%s")
 
         def execute(self, sql, params=()):
@@ -306,3 +307,4 @@ else:
                 )
             """)
             print("[DB] SQLite tables ensured.")
+
