@@ -190,14 +190,16 @@ def register(body: RegisterBody):
             raise HTTPException(400, "Username or email already taken")
 
         pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-        cur = conn.execute(
+        conn.execute(
             "INSERT INTO users (username, email, password_hash) VALUES (?,?,?)",
             (username, email, pw_hash)
         )
-        user_id = cur.lastrowid
+        user_id = conn.execute(
+            "SELECT id FROM users WHERE LOWER(username)=?", (username.lower(),)
+        ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO wallets (user_id, balance) VALUES (?,?)",
-            (user_id, STARTING_BALANCE)
+            "INSERT INTO wallets (user_id, balance, total_deposited) VALUES (?,?,?)",
+            (user_id, STARTING_BALANCE, STARTING_BALANCE)
         )
 
     token = create_access_token({"user_id": user_id, "username": username})
@@ -628,5 +630,6 @@ def _fallback_glossary():
         {"term": "Volume",         "definition": "Number of shares traded in a given period.",      "category": "Market"},
         {"term": "Yield",          "definition": "Income earned on an investment, expressed as a percentage.", "category": "Returns"},
     ]
+
 
 
