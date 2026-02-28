@@ -21,35 +21,39 @@ class ChartData:
         Frontend can use this with Chart.js, Recharts, etc.
         """
         try:
-            records = self.market.get_historical_dict(ticker, period)
+            data = self.market.get_historical_dict(ticker, period)
         except Exception as e:
             return {"error": str(e)}
 
-        # Compute moving averages
-        closes = [r["close"] for r in records]
+        # data = {Close: {date: price}, Volume: {date: vol}}
+        close_dict  = data.get("Close", {})
+        volume_dict = data.get("Volume", {})
+        dates = sorted(close_dict.keys())
+        closes = [close_dict[d] for d in dates]
+
         ma_50  = self._moving_average(closes, 50)
         ma_200 = self._moving_average(closes, 200)
 
-        for i, record in enumerate(records):
-            record["ma_50"]  = ma_50[i]
-            record["ma_200"] = ma_200[i]
-
-        # Calculate support/resistance levels
-        all_highs = [r["high"] for r in records]
-        all_lows  = [r["low"]  for r in records]
+        records = []
+        for i, d in enumerate(dates):
+            records.append({
+                "date":   d,
+                "close":  close_dict[d],
+                "volume": volume_dict.get(d, 0),
+                "ma_50":  ma_50[i],
+                "ma_200": ma_200[i],
+            })
 
         return {
-            "ticker":     ticker,
-            "period":     period,
-            "candles":    records,
+            "ticker":  ticker,
+            "period":  period,
+            "candles": records,
             "summary": {
-                "current_price":  records[-1]["close"] if records else None,
-                "period_high":    max(all_highs) if all_highs else None,
-                "period_low":     min(all_lows)  if all_lows  else None,
-                "period_change":  round(records[-1]["close"] - records[0]["open"], 2) if len(records) > 1 else 0,
-                "period_change_pct": round(
-                    ((records[-1]["close"] - records[0]["open"]) / records[0]["open"]) * 100, 2
-                ) if len(records) > 1 and records[0]["open"] else 0,
+                "current_price":     closes[-1] if closes else None,
+                "period_high":       max(closes) if closes else None,
+                "period_low":        min(closes) if closes else None,
+                "period_change":     round(closes[-1] - closes[0], 2) if len(closes) > 1 else 0,
+                "period_change_pct": round(((closes[-1] - closes[0]) / closes[0]) * 100, 2) if len(closes) > 1 and closes[0] else 0,
             },
             "education": {
                 "ma_50_explanation":  "The 50-day moving average smooths out short-term price noise. Price above MA50 is generally bullish.",
@@ -61,17 +65,20 @@ class ChartData:
     def get_volume_chart(self, ticker: str, period: str = "3mo") -> dict:
         """Returns volume bar chart data."""
         try:
-            records = self.market.get_historical_dict(ticker, period)
+            data = self.market.get_historical_dict(ticker, period)
         except Exception as e:
             return {"error": str(e)}
 
-        avg_volume = sum(r["volume"] for r in records) / len(records) if records else 0
+        volume_dict = data.get("Volume", {})
+        dates = sorted(volume_dict.keys())
+        volumes = [volume_dict[d] for d in dates]
+        avg_volume = sum(volumes) / len(volumes) if volumes else 0
 
         return {
-            "ticker": ticker,
-            "data":   [{"date": r["date"], "volume": r["volume"], "above_avg": r["volume"] > avg_volume} for r in records],
+            "ticker":     ticker,
+            "data":       [{"date": d, "volume": volume_dict[d], "above_avg": volume_dict[d] > avg_volume} for d in dates],
             "avg_volume": int(avg_volume),
-            "education": "High volume on a price move confirms strength. Low volume moves may not last.",
+            "education":  "High volume on a price move confirms strength. Low volume moves may not last.",
         }
 
     def get_portfolio_performance_chart(self, user_id: int) -> dict:

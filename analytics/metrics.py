@@ -105,13 +105,16 @@ class MetricsEngine:
             },
         }
 
-    def _technical_analysis(self, historical: list, current_price: float) -> dict:
+    def _technical_analysis(self, historical: dict, current_price: float) -> dict:
         if not historical:
             return {"error": "No historical data"}
 
-        closes = [r["close"] for r in historical]
-        highs  = [r["high"]  for r in historical]
-        lows   = [r["low"]   for r in historical]
+        close_dict = historical.get("Close", {})
+        dates  = sorted(close_dict.keys())
+        closes = [close_dict[d] for d in dates]
+        # No open/high/low in our dict format — use close as proxy
+        highs  = closes
+        lows   = closes
 
         ma_50  = sum(closes[-50:])  / min(50,  len(closes))
         ma_200 = sum(closes[-200:]) / min(200, len(closes))
@@ -163,7 +166,8 @@ class MetricsEngine:
 
     def _risk_assessment(self, info: dict, historical: list) -> dict:
         beta = info.get("beta")
-        closes = [r["close"] for r in historical] if historical else []
+        close_dict = historical.get("Close", {}) if historical else {}
+        closes = [close_dict[d] for d in sorted(close_dict.keys())]
 
         # Volatility: standard deviation of daily returns
         volatility = None
