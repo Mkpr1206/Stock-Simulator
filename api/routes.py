@@ -255,12 +255,15 @@ def delete_account(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     try:
         with get_db() as conn:
-            conn.execute("DELETE FROM trades WHERE user_id=?",          (user_id,))
-            conn.execute("DELETE FROM holdings WHERE user_id=?",        (user_id,))
-            conn.execute("DELETE FROM watchlist WHERE user_id=?",       (user_id,))
-            conn.execute("DELETE FROM lesson_progress WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM wallets WHERE user_id=?",         (user_id,))
-            conn.execute("DELETE FROM users WHERE id=?",                (user_id,))
+            conn.execute("DELETE FROM trades WHERE user_id=?",           (user_id,))
+            conn.execute("DELETE FROM holdings WHERE user_id=?",         (user_id,))
+            conn.execute("DELETE FROM watchlist WHERE user_id=?",        (user_id,))
+            conn.execute("DELETE FROM lesson_progress WHERE user_id=?",  (user_id,))
+            conn.execute("DELETE FROM transactions WHERE user_id=?",     (user_id,))
+            conn.execute("DELETE FROM limit_orders WHERE user_id=?",     (user_id,))
+            conn.execute("DELETE FROM portfolio_resets WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM wallets WHERE user_id=?",          (user_id,))
+            conn.execute("DELETE FROM users WHERE id=?",                 (user_id,))
         return {"message": "Account permanently deleted"}
     except Exception as e:
         raise HTTPException(500, f"Delete failed: {str(e)}")
@@ -630,6 +633,7 @@ def _fallback_glossary():
         {"term": "Volume",         "definition": "Number of shares traded in a given period.",      "category": "Market"},
         {"term": "Yield",          "definition": "Income earned on an investment, expressed as a percentage.", "category": "Returns"},
     ]
+
 
 
 
