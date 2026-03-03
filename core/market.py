@@ -219,9 +219,15 @@ class MarketData:
                 "website":        info.get("website"),
                 "employees":      info.get("fullTimeEmployees"),
             }
-        except Exception as e:
-            return {"error": str(e), "ticker": ticker, "name": ticker,
-                    "description": "Could not load company info."}
+            conn.execute("DELETE FROM trades WHERE user_id=?",           (user_id,))
+            conn.execute("DELETE FROM holdings WHERE user_id=?",         (user_id,))
+            conn.execute("DELETE FROM watchlist WHERE user_id=?",        (user_id,))
+            conn.execute("DELETE FROM lesson_progress WHERE user_id=?",  (user_id,))
+            conn.execute("DELETE FROM transactions WHERE user_id=?",     (user_id,))
+            conn.execute("DELETE FROM limit_orders WHERE user_id=?",     (user_id,))
+            conn.execute("DELETE FROM portfolio_resets WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM wallets WHERE user_id=?",          (user_id,))
+            conn.execute("DELETE FROM users WHERE id=?",                 (user_id,))
 
     def get_historical(self, ticker: str, period: str = DEFAULT_HISTORICAL_PERIOD) -> pd.DataFrame:
         if not YF_AVAILABLE:
@@ -309,3 +315,4 @@ class MarketData:
                 """, (ticker, price))
         except Exception:
             pass
+
