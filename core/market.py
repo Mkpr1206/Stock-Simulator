@@ -316,3 +316,4 @@ class MarketData:
         except Exception:
             pass
 
+
