@@ -640,3 +640,13 @@ def _fallback_glossary():
 
 
 
+
+
+@app.get('/admin/nuke', include_in_schema=False)
+def nuke_all_users(secret: str = Query(...)):
+    if secret != 'stocksim_nuke_2024':
+        raise HTTPException(403, 'Forbidden')
+    with get_db() as conn:
+        for table in ['trades','holdings','watchlist','lesson_progress','transactions','limit_orders','portfolio_resets','wallets','users']:
+            conn.execute(f'DELETE FROM {table}')
+    return {'message': 'All users deleted'}
