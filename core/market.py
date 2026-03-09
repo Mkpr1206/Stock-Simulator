@@ -219,15 +219,48 @@ class MarketData:
                 "website":        info.get("website"),
                 "employees":      info.get("fullTimeEmployees"),
             }
-            conn.execute("DELETE FROM trades WHERE user_id=?",           (user_id,))
-            conn.execute("DELETE FROM holdings WHERE user_id=?",         (user_id,))
-            conn.execute("DELETE FROM watchlist WHERE user_id=?",        (user_id,))
-            conn.execute("DELETE FROM lesson_progress WHERE user_id=?",  (user_id,))
-            conn.execute("DELETE FROM transactions WHERE user_id=?",     (user_id,))
-            conn.execute("DELETE FROM limit_orders WHERE user_id=?",     (user_id,))
-            conn.execute("DELETE FROM portfolio_resets WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM wallets WHERE user_id=?",          (user_id,))
-            conn.execute("DELETE FROM users WHERE id=?",                 (user_id,))
+        except Exception:
+            return self._mock_info(ticker)
+
+    def _mock_info(self, ticker: str) -> dict:
+        mock = {
+            "TCS.NS":       {"name": "Tata Consultancy Services", "sector": "Technology",  "pe_ratio": 28.5, "market_cap": 11500000000000, "beta": 0.6,  "dividend_yield": 0.012},
+            "INFY.NS":      {"name": "Infosys Limited",           "sector": "Technology",  "pe_ratio": 24.2, "market_cap": 7400000000000,  "beta": 0.7,  "dividend_yield": 0.021},
+            "RELIANCE.NS":  {"name": "Reliance Industries",       "sector": "Energy",      "pe_ratio": 22.1, "market_cap": 19000000000000, "beta": 0.9,  "dividend_yield": 0.004},
+            "HDFCBANK.NS":  {"name": "HDFC Bank",                 "sector": "Finance",     "pe_ratio": 18.4, "market_cap": 12500000000000, "beta": 0.8,  "dividend_yield": 0.011},
+            "WIPRO.NS":     {"name": "Wipro Limited",             "sector": "Technology",  "pe_ratio": 21.3, "market_cap": 2800000000000,  "beta": 0.75, "dividend_yield": 0.005},
+            "TATASTEEL.NS": {"name": "Tata Steel",                "sector": "Materials",   "pe_ratio": 8.2,  "market_cap": 1900000000000,  "beta": 1.4,  "dividend_yield": 0.008},
+            "SBIN.NS":      {"name": "State Bank of India",       "sector": "Finance",     "pe_ratio": 10.1, "market_cap": 7100000000000,  "beta": 1.1,  "dividend_yield": 0.018},
+            "AAPL":         {"name": "Apple Inc.",                "sector": "Technology",  "pe_ratio": 29.8, "market_cap": 2900000000000,  "beta": 1.2,  "dividend_yield": 0.005},
+            "MSFT":         {"name": "Microsoft Corporation",     "sector": "Technology",  "pe_ratio": 35.2, "market_cap": 3100000000000,  "beta": 0.9,  "dividend_yield": 0.007},
+            "GOOGL":        {"name": "Alphabet Inc.",             "sector": "Technology",  "pe_ratio": 24.1, "market_cap": 2100000000000,  "beta": 1.1,  "dividend_yield": 0.0},
+            "TSLA":         {"name": "Tesla Inc.",                "sector": "Automotive",  "pe_ratio": 55.0, "market_cap": 780000000000,   "beta": 2.0,  "dividend_yield": 0.0},
+            "NVDA":         {"name": "NVIDIA Corporation",        "sector": "Technology",  "pe_ratio": 65.0, "market_cap": 2200000000000,  "beta": 1.7,  "dividend_yield": 0.001},
+            "AMZN":         {"name": "Amazon.com Inc.",           "sector": "Consumer",    "pe_ratio": 42.0, "market_cap": 1900000000000,  "beta": 1.3,  "dividend_yield": 0.0},
+            "META":         {"name": "Meta Platforms",            "sector": "Technology",  "pe_ratio": 22.0, "market_cap": 1300000000000,  "beta": 1.2,  "dividend_yield": 0.004},
+            "GSK.L":        {"name": "GSK plc",                   "sector": "Healthcare",  "pe_ratio": 14.2, "market_cap": 72000000000,    "beta": 0.5,  "dividend_yield": 0.038},
+            "AZN.L":        {"name": "AstraZeneca",               "sector": "Healthcare",  "pe_ratio": 22.5, "market_cap": 215000000000,   "beta": 0.4,  "dividend_yield": 0.021},
+            "HSBA.L":       {"name": "HSBC Holdings",             "sector": "Finance",     "pe_ratio": 8.1,  "market_cap": 145000000000,   "beta": 0.7,  "dividend_yield": 0.052},
+            "BP.L":         {"name": "BP plc",                    "sector": "Energy",      "pe_ratio": 9.5,  "market_cap": 92000000000,    "beta": 0.8,  "dividend_yield": 0.045},
+            "7203.T":       {"name": "Toyota Motor",              "sector": "Automotive",  "pe_ratio": 9.8,  "market_cap": 38000000000000, "beta": 0.7,  "dividend_yield": 0.028},
+            "9984.T":       {"name": "SoftBank Group",            "sector": "Technology",  "pe_ratio": 15.0, "market_cap": 10000000000000, "beta": 1.3,  "dividend_yield": 0.005},
+            "ASML.AS":      {"name": "ASML Holding",              "sector": "Technology",  "pe_ratio": 38.0, "market_cap": 290000000000,   "beta": 1.1,  "dividend_yield": 0.008},
+            "SAP.DE":       {"name": "SAP SE",                    "sector": "Technology",  "pe_ratio": 32.0, "market_cap": 230000000000,   "beta": 0.9,  "dividend_yield": 0.012},
+        }
+        d = mock.get(ticker.upper(), {})
+        return {
+            "ticker":         ticker.upper(),
+            "name":           d.get("name", ticker.upper()),
+            "sector":         d.get("sector", "Unknown"),
+            "industry":       d.get("sector", "Unknown"),
+            "pe_ratio":       d.get("pe_ratio"),
+            "market_cap":     d.get("market_cap"),
+            "dividend_yield": d.get("dividend_yield"),
+            "beta":           d.get("beta"),
+            "52w_high":       None,
+            "52w_low":        None,
+            "description":    d.get("name", ticker.upper()) + " — live company details unavailable.",
+        }
 
     def get_historical(self, ticker: str, period: str = DEFAULT_HISTORICAL_PERIOD) -> pd.DataFrame:
         if not YF_AVAILABLE:
@@ -315,5 +348,7 @@ class MarketData:
                 """, (ticker, price))
         except Exception:
             pass
+
+
 
 
